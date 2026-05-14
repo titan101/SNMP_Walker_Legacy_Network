@@ -3,8 +3,10 @@ import pytest
 from snmp_discovery import (
     DiscoveryResult,
     enrich_result,
+    format_timeticks,
     parse_communities,
     parse_targets,
+    summarize_neighbors,
 )
 
 
@@ -37,3 +39,13 @@ def test_enrich_result_detects_common_cisco_description():
     assert result.device_type == "router"
     assert result.device_model == "ASR9000"
     assert result.software_version == "7.5.2"
+
+
+def test_format_timeticks_converts_hundredths_to_duration():
+    assert format_timeticks("9006100") == "1d 1h 1m 1s"
+
+
+def test_summarize_neighbors_matches_table_suffixes():
+    names = {"1.0.8802.1.1.2.1.4.1.1.9.1.2.3": "sw01"}
+    ports = {"1.0.8802.1.1.2.1.4.1.1.8.1.2.3": "Gi1/0/1"}
+    assert summarize_neighbors(names, ports) == "sw01 via Gi1/0/1"

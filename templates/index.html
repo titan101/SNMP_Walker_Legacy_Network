@@ -167,7 +167,7 @@
     }
     .summary {
       display: grid;
-      grid-template-columns: repeat(4, minmax(0, 1fr));
+      grid-template-columns: repeat(6, minmax(0, 1fr));
       gap: 10px;
       padding: 14px;
       border-bottom: 1px solid var(--line);
@@ -182,7 +182,7 @@
     .metric strong { display: block; font-size: 20px; line-height: 1; margin-bottom: 5px; }
     .metric span { color: var(--muted); font-size: 12px; font-weight: 700; }
     .table-wrap { overflow: auto; max-height: calc(100vh - 218px); }
-    table { width: 100%; border-collapse: collapse; min-width: 1120px; }
+    table { width: 100%; border-collapse: collapse; min-width: 1760px; }
     th, td {
       padding: 9px 10px;
       border-bottom: 1px solid var(--line);
@@ -274,6 +274,7 @@
         </div>
         <div class="checks">
           <label class="check"><input type="checkbox" name="do_ping" {% if settings.do_ping %}checked{% endif %}> Ping before SNMP</label>
+          <label class="check"><input type="checkbox" name="walk_details" {% if settings.walk_details %}checked{% endif %}> Walk inventory MIBs</label>
           <label class="check"><input type="checkbox" name="include_community" {% if settings.include_community %}checked{% endif %}> Include matched community in downloads</label>
         </div>
         <div class="actions">
@@ -311,6 +312,8 @@
           <div class="metric"><strong>{{ summary.pingable }}</strong><span>Pingable</span></div>
           <div class="metric"><strong>{{ summary.snmp_ok }}</strong><span>SNMP OK</span></div>
           <div class="metric"><strong>{{ summary.models }}</strong><span>Models Found</span></div>
+          <div class="metric"><strong>{{ summary.serials }}</strong><span>Serials</span></div>
+          <div class="metric"><strong>{{ summary.neighbors }}</strong><span>Neighbors</span></div>
         </div>
         <div class="table-wrap">
           <table>
@@ -324,6 +327,12 @@
                 <th>Type</th>
                 <th>Address</th>
                 <th>Software</th>
+                <th>Serials</th>
+                <th>Uptime</th>
+                <th>Interfaces</th>
+                <th>LLDP</th>
+                <th>CDP</th>
+                <th>ARP/MAC</th>
                 <th>Error</th>
               </tr>
             </thead>
@@ -338,6 +347,12 @@
                   <td>{{ row.device_type }}</td>
                   <td>{{ row.address }}</td>
                   <td>{{ row.software_version }}</td>
+                  <td>{{ row.serial_numbers }}</td>
+                  <td>{{ row.uptime }}</td>
+                  <td>{{ row.interfaces_up }}/{{ row.interface_count }} up<br>{{ row.interface_summary }}</td>
+                  <td>{{ row.lldp_neighbors }}</td>
+                  <td>{{ row.cdp_neighbors }}</td>
+                  <td>ARP {{ row.arp_entries }}<br>MAC {{ row.mac_entries }}</td>
                   <td>{{ row.snmp_error }}</td>
                 </tr>
               {% endfor %}

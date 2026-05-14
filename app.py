@@ -37,6 +37,7 @@ def index():
         "snmp_timeout_seconds": 1.2,
         "snmp_retries": 1,
         "do_ping": True,
+        "walk_details": True,
         "include_community": False,
     }
 
@@ -60,6 +61,7 @@ def index():
                 snmp_retries=settings["snmp_retries"],
                 workers=settings["workers"],
                 do_ping=settings["do_ping"],
+                walk_details=settings["walk_details"],
             )
             elapsed = round(time.perf_counter() - started, 2)
         except ValueError as exc:
@@ -104,6 +106,17 @@ def download(fmt: str):
             "device_type",
             "address",
             "software_version",
+            "serial_numbers",
+            "sys_contact",
+            "uptime",
+            "interface_count",
+            "interfaces_up",
+            "interfaces_down",
+            "interface_summary",
+            "lldp_neighbors",
+            "cdp_neighbors",
+            "arp_entries",
+            "mac_entries",
             "snmp_status",
             "snmp_error",
         ]
@@ -136,6 +149,7 @@ def read_settings(form) -> dict:
         "snmp_timeout_seconds": clamp_float(form.get("snmp_timeout_seconds"), 0.2, 20.0, 1.2),
         "snmp_retries": clamp_int(form.get("snmp_retries"), 0, 5, 1),
         "do_ping": form.get("do_ping") == "on",
+        "walk_details": form.get("walk_details") == "on",
         "include_community": form.get("include_community") == "on",
     }
 
@@ -162,6 +176,8 @@ def build_summary(results: list[DiscoveryResult]) -> dict[str, int]:
         "pingable": sum(1 for result in results if result.pingable_or_not == "yes"),
         "snmp_ok": sum(1 for result in results if result.snmp_status == "ok"),
         "models": sum(1 for result in results if result.device_model),
+        "serials": sum(1 for result in results if result.serial_numbers),
+        "neighbors": sum(1 for result in results if result.lldp_neighbors or result.cdp_neighbors),
     }
 
 
