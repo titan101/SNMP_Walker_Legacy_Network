@@ -1,0 +1,353 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>SNMP Discovery</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #0a0d10;
+      --panel: #111820;
+      --panel-2: #16212b;
+      --field: #0c1217;
+      --ink: #eef4f8;
+      --muted: #96a9b7;
+      --line: #263847;
+      --accent: #35c2a2;
+      --accent-2: #68a7ff;
+      --warn: #ffbd6b;
+      --bad: #ff7b7b;
+      --good: #65d69b;
+      --shadow: 0 18px 60px rgba(0, 0, 0, 0.34);
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      background: linear-gradient(180deg, rgba(53, 194, 162, 0.08), transparent 260px), var(--bg);
+      color: var(--ink);
+      font: 14px/1.45 "Segoe UI", Arial, sans-serif;
+    }
+    button, input, textarea { font: inherit; }
+    header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 18px;
+      padding: 18px 22px;
+      border-bottom: 1px solid var(--line);
+      background: rgba(10, 13, 16, 0.92);
+      position: sticky;
+      top: 0;
+      z-index: 3;
+      backdrop-filter: blur(10px);
+    }
+    .brand { display: flex; align-items: center; gap: 12px; min-width: 0; }
+    .mark {
+      display: grid;
+      place-items: center;
+      width: 38px;
+      height: 38px;
+      border-radius: 8px;
+      background: var(--accent);
+      color: #06110f;
+      font-weight: 900;
+    }
+    h1, h2, p { margin: 0; }
+    h1 { font-size: 18px; line-height: 1.2; }
+    .subtitle { color: var(--muted); font-size: 12px; margin-top: 2px; }
+    main {
+      width: min(1720px, calc(100vw - 28px));
+      margin: 14px auto 28px;
+      display: grid;
+      grid-template-columns: minmax(380px, 0.82fr) minmax(620px, 1.18fr);
+      gap: 14px;
+    }
+    section {
+      min-width: 0;
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      box-shadow: var(--shadow);
+      overflow: hidden;
+    }
+    .panel-head {
+      min-height: 52px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 12px 14px;
+      border-bottom: 1px solid var(--line);
+      background: var(--panel-2);
+    }
+    h2 { font-size: 14px; }
+    form.scan {
+      display: grid;
+      gap: 12px;
+      padding: 14px;
+    }
+    label {
+      display: grid;
+      gap: 6px;
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 700;
+    }
+    textarea, input {
+      width: 100%;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      background: var(--field);
+      color: var(--ink);
+      outline: none;
+    }
+    textarea {
+      min-height: 160px;
+      resize: vertical;
+      padding: 10px;
+      font-family: Consolas, "Courier New", monospace;
+    }
+    input { height: 38px; padding: 0 10px; }
+    textarea:focus, input:focus {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px rgba(53, 194, 162, 0.14);
+    }
+    .grid-4 {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 10px;
+    }
+    .checks {
+      display: flex;
+      gap: 14px;
+      flex-wrap: wrap;
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 700;
+    }
+    .check {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .check input { width: 16px; height: 16px; padding: 0; }
+    .actions {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      align-items: center;
+    }
+    button, .button {
+      min-height: 38px;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      color: var(--ink);
+      background: #17222c;
+      padding: 0 12px;
+      font-weight: 800;
+      cursor: pointer;
+      text-decoration: none;
+    }
+    button.primary {
+      background: var(--accent);
+      color: #06110f;
+      border-color: transparent;
+    }
+    button.secondary { background: #101a23; }
+    .hint { color: var(--muted); font-size: 12px; }
+    .error {
+      margin: 14px;
+      padding: 10px 12px;
+      border: 1px solid rgba(255, 123, 123, 0.36);
+      border-radius: 6px;
+      color: #ffd1d1;
+      background: rgba(255, 123, 123, 0.1);
+    }
+    .summary {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 10px;
+      padding: 14px;
+      border-bottom: 1px solid var(--line);
+    }
+    .metric {
+      background: #0e151c;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 10px;
+      min-width: 0;
+    }
+    .metric strong { display: block; font-size: 20px; line-height: 1; margin-bottom: 5px; }
+    .metric span { color: var(--muted); font-size: 12px; font-weight: 700; }
+    .table-wrap { overflow: auto; max-height: calc(100vh - 218px); }
+    table { width: 100%; border-collapse: collapse; min-width: 1120px; }
+    th, td {
+      padding: 9px 10px;
+      border-bottom: 1px solid var(--line);
+      text-align: left;
+      vertical-align: top;
+    }
+    th {
+      position: sticky;
+      top: 0;
+      z-index: 1;
+      background: #0f1820;
+      color: var(--muted);
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: 0;
+    }
+    td { font-size: 13px; }
+    .mono { font-family: Consolas, "Courier New", monospace; }
+    .pill {
+      display: inline-flex;
+      align-items: center;
+      min-height: 24px;
+      border-radius: 999px;
+      padding: 0 9px;
+      font-size: 12px;
+      font-weight: 900;
+      background: #1a2630;
+      color: var(--muted);
+    }
+    .pill.ok { color: #07120d; background: var(--good); }
+    .pill.bad { color: #220606; background: var(--bad); }
+    .pill.warn { color: #201305; background: var(--warn); }
+    .empty {
+      padding: 54px 18px;
+      text-align: center;
+      color: var(--muted);
+    }
+    .download-form { display: inline; }
+    @media (max-width: 980px) {
+      header { align-items: flex-start; flex-direction: column; }
+      main { grid-template-columns: 1fr; }
+      .grid-4, .summary { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .table-wrap { max-height: none; }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="brand">
+      <div class="mark">SN</div>
+      <div>
+        <h1>SNMP Discovery</h1>
+        <p class="subtitle">Probe legacy IP space, find the community that answers, and export inventory data.</p>
+      </div>
+    </div>
+    {% if elapsed is not none %}
+      <p class="hint">Completed in {{ elapsed }}s</p>
+    {% endif %}
+  </header>
+
+  <main>
+    <section>
+      <div class="panel-head">
+        <div>
+          <h2>Scan Input</h2>
+          <p class="subtitle">IPs, CIDRs, and last-octet ranges are supported.</p>
+        </div>
+      </div>
+      {% if error %}
+        <div class="error">{{ error }}</div>
+      {% endif %}
+      <form class="scan" method="post">
+        <label>
+          Targets
+          <textarea name="targets" spellcheck="false">{{ targets }}</textarea>
+        </label>
+        <label>
+          Community strings
+          <textarea name="communities" spellcheck="false">{{ communities }}</textarea>
+        </label>
+        <div class="grid-4">
+          <label>Max hosts<input type="number" name="max_hosts" min="1" max="65536" value="{{ settings.max_hosts }}"></label>
+          <label>Workers<input type="number" name="workers" min="1" max="128" value="{{ settings.workers }}"></label>
+          <label>Ping ms<input type="number" name="ping_timeout_ms" min="100" max="10000" value="{{ settings.ping_timeout_ms }}"></label>
+          <label>SNMP sec<input type="number" step="0.1" name="snmp_timeout_seconds" min="0.2" max="20" value="{{ settings.snmp_timeout_seconds }}"></label>
+        </div>
+        <div class="grid-4">
+          <label>Retries<input type="number" name="snmp_retries" min="0" max="5" value="{{ settings.snmp_retries }}"></label>
+        </div>
+        <div class="checks">
+          <label class="check"><input type="checkbox" name="do_ping" {% if settings.do_ping %}checked{% endif %}> Ping before SNMP</label>
+          <label class="check"><input type="checkbox" name="include_community" {% if settings.include_community %}checked{% endif %}> Include matched community in downloads</label>
+        </div>
+        <div class="actions">
+          <button class="primary" type="submit">Run discovery</button>
+          <span class="hint">SNMP v2c on UDP/161</span>
+        </div>
+      </form>
+    </section>
+
+    <section>
+      <div class="panel-head">
+        <div>
+          <h2>Results</h2>
+          <p class="subtitle">Use CSV for quick cleanup or XLSX for Excel handoff.</p>
+        </div>
+        {% if results %}
+          <div class="actions">
+            <form class="download-form" method="post" action="/download/csv">
+              <input type="hidden" name="results_json" value='{{ results_json|e }}'>
+              {% if settings.include_community %}<input type="hidden" name="include_community" value="on">{% endif %}
+              <button class="secondary" type="submit">CSV</button>
+            </form>
+            <form class="download-form" method="post" action="/download/xlsx">
+              <input type="hidden" name="results_json" value='{{ results_json|e }}'>
+              {% if settings.include_community %}<input type="hidden" name="include_community" value="on">{% endif %}
+              <button class="secondary" type="submit">Excel</button>
+            </form>
+          </div>
+        {% endif %}
+      </div>
+
+      {% if results %}
+        <div class="summary">
+          <div class="metric"><strong>{{ summary.targets }}</strong><span>Targets</span></div>
+          <div class="metric"><strong>{{ summary.pingable }}</strong><span>Pingable</span></div>
+          <div class="metric"><strong>{{ summary.snmp_ok }}</strong><span>SNMP OK</span></div>
+          <div class="metric"><strong>{{ summary.models }}</strong><span>Models Found</span></div>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>IP</th>
+                <th>Ping</th>
+                <th>SNMP</th>
+                <th>Hostname</th>
+                <th>Model</th>
+                <th>Type</th>
+                <th>Address</th>
+                <th>Software</th>
+                <th>Error</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for row in results %}
+                <tr>
+                  <td class="mono">{{ row.ip }}</td>
+                  <td><span class="pill {% if row.pingable_or_not == 'yes' %}ok{% else %}bad{% endif %}">{{ row.pingable_or_not }}</span></td>
+                  <td><span class="pill {% if row.snmp_status == 'ok' %}ok{% else %}warn{% endif %}">{{ row.snmp_status }}</span></td>
+                  <td>{{ row.hostname }}</td>
+                  <td>{{ row.device_model }}</td>
+                  <td>{{ row.device_type }}</td>
+                  <td>{{ row.address }}</td>
+                  <td>{{ row.software_version }}</td>
+                  <td>{{ row.snmp_error }}</td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      {% else %}
+        <div class="empty">Run a discovery to populate the inventory table.</div>
+      {% endif %}
+    </section>
+  </main>
+</body>
+</html>
