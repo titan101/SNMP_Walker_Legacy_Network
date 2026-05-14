@@ -2,6 +2,7 @@ import pytest
 
 from snmp_discovery import (
     DiscoveryResult,
+    discover_many,
     enrich_result,
     format_timeticks,
     parse_communities,
@@ -49,3 +50,13 @@ def test_summarize_neighbors_matches_table_suffixes():
     names = {"1.0.8802.1.1.2.1.4.1.1.9.1.2.3": "sw01"}
     ports = {"1.0.8802.1.1.2.1.4.1.1.8.1.2.3": "Gi1/0/1"}
     assert summarize_neighbors(names, ports) == "sw01 via Gi1/0/1"
+
+
+def test_discover_many_returns_error_row_when_worker_raises(monkeypatch):
+    def broken_discover(*args, **kwargs):
+        raise RuntimeError("boom")
+
+    monkeypatch.setattr("snmp_discovery.discover_one", broken_discover)
+    rows = discover_many(["192.0.2.1"], ["public"], do_ping=False)
+    assert rows[0].snmp_status == "error"
+    assert "boom" in rows[0].snmp_error

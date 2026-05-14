@@ -275,11 +275,12 @@
         <div class="checks">
           <label class="check"><input type="checkbox" name="do_ping" {% if settings.do_ping %}checked{% endif %}> Ping before SNMP</label>
           <label class="check"><input type="checkbox" name="walk_details" {% if settings.walk_details %}checked{% endif %}> Walk inventory MIBs</label>
+          <label class="check"><input type="checkbox" name="walk_traffic_tables" {% if settings.walk_traffic_tables %}checked{% endif %}> Walk ARP/MAC tables</label>
           <label class="check"><input type="checkbox" name="include_community" {% if settings.include_community %}checked{% endif %}> Include matched community in downloads</label>
         </div>
         <div class="actions">
           <button class="primary" type="submit">Run discovery</button>
-          <span class="hint">SNMP v2c on UDP/161</span>
+          <span class="hint">SNMP v2c on UDP/161. Inventory and ARP/MAC walks are optional for slower legacy gear.</span>
         </div>
       </form>
     </section>

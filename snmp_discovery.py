@@ -225,7 +225,10 @@ async def snmp_get_values_async(
 
 
 def snmp_get_values(ip: str, community: str, timeout_seconds: float, retries: int) -> tuple[dict[str, str] | None, str]:
-    return asyncio.run(snmp_get_values_async(ip, community, timeout_seconds, retries))
+    try:
+        return asyncio.run(snmp_get_values_async(ip, community, timeout_seconds, retries))
+    except Exception as exc:
+        return None, f"{type(exc).__name__}: {exc}"
 
 
 async def snmp_walk_async(
@@ -272,7 +275,10 @@ def snmp_walk(
     retries: int,
     max_rows: int = 2000,
 ) -> tuple[dict[str, str], str]:
-    return asyncio.run(snmp_walk_async(ip, community, oid, timeout_seconds, retries, max_rows))
+    try:
+        return asyncio.run(snmp_walk_async(ip, community, oid, timeout_seconds, retries, max_rows))
+    except Exception as exc:
+        return {}, f"{type(exc).__name__}: {exc}"
 
 
 def discover_one(
@@ -282,7 +288,8 @@ def discover_one(
     snmp_timeout_seconds: float = 1.2,
     snmp_retries: int = 1,
     do_ping: bool = True,
-    walk_details: bool = True,
+    walk_details: bool = False,
+    walk_traffic_tables: bool = False,
 ) -> DiscoveryResult:
     result = DiscoveryResult(ip=ip)
     if do_ping:
@@ -303,7 +310,7 @@ def discover_one(
             result.interface_count = clean_snmp_text(values.get("interface_count", ""))
             enrich_result(result)
             if walk_details:
-                enrich_result_from_walks(result, community, snmp_timeout_seconds, snmp_retries)
+                enrich_result_from_walks(result, community, snmp_timeout_seconds, snmp_retries, walk_traffic_tables)
             return result
         last_error = error
 
@@ -320,7 +327,8 @@ def discover_many(
     snmp_retries: int = 1,
     workers: int = 24,
     do_ping: bool = True,
-    walk_details: bool = True,
+    walk_details: bool = False,
+    walk_traffic_tables: bool = False,
 ) -> list[DiscoveryResult]:
     ip_list = list(ips)
     results: list[DiscoveryResult] = []
@@ -336,11 +344,22 @@ def discover_many(
                 snmp_retries,
                 do_ping,
                 walk_details,
+                walk_traffic_tables,
             ): ip
             for ip in ip_list
         }
         for future in as_completed(futures):
-            results.append(future.result())
+            try:
+                results.append(future.result())
+            except Exception as exc:
+                ip = futures[future]
+                results.append(
+                    DiscoveryResult(
+                        ip=ip,
+                        snmp_status="error",
+                        snmp_error=f"{type(exc).__name__}: {exc}",
+                    )
+                )
     return sorted(results, key=lambda item: ipaddress.ip_address(item.ip))
 
 
@@ -374,11 +393,12 @@ def enrich_result_from_walks(
     community: str,
     timeout_seconds: float,
     retries: int,
+    walk_traffic_tables: bool = False,
 ) -> None:
     ip = result.ip
-    serials, _ = snmp_walk(ip, community, ENT_PHYSICAL_SERIAL, timeout_seconds, retries, max_rows=500)
-    models, _ = snmp_walk(ip, community, ENT_PHYSICAL_MODEL, timeout_seconds, retries, max_rows=500)
-    descriptions, _ = snmp_walk(ip, community, ENT_PHYSICAL_DESCR, timeout_seconds, retries, max_rows=500)
+    serials, _ = snmp_walk(ip, community, ENT_PHYSICAL_SERIAL, timeout_seconds, retries, max_rows=200)
+    models, _ = snmp_walk(ip, community, ENT_PHYSICAL_MODEL, timeout_seconds, retries, max_rows=200)
+    descriptions, _ = snmp_walk(ip, community, ENT_PHYSICAL_DESCR, timeout_seconds, retries, max_rows=200)
     result.serial_numbers = summarize_unique(non_empty_values(serials), limit=8)
     result.entity_models = summarize_unique(non_empty_values(models), limit=8)
     if not result.device_model and result.entity_models:
@@ -387,10 +407,10 @@ def enrich_result_from_walks(
         serial_from_descr = guess_serial_from_text(" ".join(non_empty_values(descriptions)))
         result.serial_numbers = serial_from_descr
 
-    if_descr, _ = snmp_walk(ip, community, IF_DESCR, timeout_seconds, retries, max_rows=2000)
-    if_alias, _ = snmp_walk(ip, community, IF_ALIAS, timeout_seconds, retries, max_rows=2000)
-    if_admin, _ = snmp_walk(ip, community, IF_ADMIN_STATUS, timeout_seconds, retries, max_rows=2000)
-    if_oper, _ = snmp_walk(ip, community, IF_OPER_STATUS, timeout_seconds, retries, max_rows=2000)
+    if_descr, _ = snmp_walk(ip, community, IF_DESCR, timeout_seconds, retries, max_rows=1000)
+    if_alias, _ = snmp_walk(ip, community, IF_ALIAS, timeout_seconds, retries, max_rows=1000)
+    if_admin, _ = snmp_walk(ip, community, IF_ADMIN_STATUS, timeout_seconds, retries, max_rows=1000)
+    if_oper, _ = snmp_walk(ip, community, IF_OPER_STATUS, timeout_seconds, retries, max_rows=1000)
     summarize_interfaces(result, if_descr, if_alias, if_admin, if_oper)
 
     lldp_names, _ = snmp_walk(ip, community, LLDP_REM_SYS_NAME, timeout_seconds, retries, max_rows=500)
@@ -402,10 +422,11 @@ def enrich_result_from_walks(
     cdp_platforms, _ = snmp_walk(ip, community, CDP_CACHE_PLATFORM, timeout_seconds, retries, max_rows=500)
     result.cdp_neighbors = summarize_neighbors(cdp_names, cdp_ports, cdp_platforms, limit=12)
 
-    arp_entries, _ = snmp_walk(ip, community, IP_NET_TO_MEDIA_PHYS, timeout_seconds, retries, max_rows=5000)
-    mac_entries, _ = snmp_walk(ip, community, DOT1D_TP_FDB_ADDRESS, timeout_seconds, retries, max_rows=5000)
-    result.arp_entries = str(len(arp_entries)) if arp_entries else ""
-    result.mac_entries = str(len(mac_entries)) if mac_entries else ""
+    if walk_traffic_tables:
+        arp_entries, _ = snmp_walk(ip, community, IP_NET_TO_MEDIA_PHYS, timeout_seconds, retries, max_rows=3000)
+        mac_entries, _ = snmp_walk(ip, community, DOT1D_TP_FDB_ADDRESS, timeout_seconds, retries, max_rows=3000)
+        result.arp_entries = str(len(arp_entries)) if arp_entries else ""
+        result.mac_entries = str(len(mac_entries)) if mac_entries else ""
 
 
 def non_empty_values(rows: dict[str, str]) -> list[str]:

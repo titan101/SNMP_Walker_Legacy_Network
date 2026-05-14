@@ -64,5 +64,6 @@ The launchers create a local `.venv`, install requirements inside it, and run th
 - It does not SSH, Telnet, log in, pull running configs, or change devices.
 - ICMP ping may be blocked by firewalls even when SNMP works.
 - Large subnets can take time; tune workers and timeouts in the form.
-- Disable "Walk inventory MIBs" for a fast first pass, then re-run detail walks on the ranges that answered.
+- The default scan is a fast identity pass. Enable "Walk inventory MIBs" for serials, interfaces, LLDP, and CDP.
+- Enable "Walk ARP/MAC tables" only when you need endpoint-style counts; those tables can be large and slow on old switches.
 - Future feature ideas are tracked in `ROADMAP.md`.

@@ -9,6 +9,16 @@ Useful next steps:
 - Add vendor-specific collectors for Cisco, Juniper, ADVA, MRV, Ciena, Nokia, Arista, Calix, and APC.
 - Add detailed interface export as a second worksheet instead of only a per-device summary.
 - Add detailed neighbor export as a second worksheet instead of only a per-device summary.
+- Add live progress with partial results so a long subnet scan does not look frozen.
+- Add a retry queue for failed devices with slower timeout/retry settings.
+- Add vendor OID profiles for Cisco, Juniper, ADVA, MRV, Ciena, Nokia, Arista, Calix, Fortinet, Palo Alto, APC, Eaton, and legacy optical shelves.
+- Add an OID evidence view showing which OIDs answered for each device.
+- Add scan presets: fast identity, inventory, topology, and endpoint-heavy.
+- Add Excel worksheets for device summary, interfaces, neighbors, serials/modules, and failed targets.
+- Add SNMP view detection hints when a community works but tables are hidden.
+- Add import/export for community string profiles with local masking.
+- Add a safe local SQLite scan history so overnight scans can be resumed or compared.
+- Add subnet grouping and per-site labels for cleaner migration planning exports.
 - Add a "retry failed with slower timeout" button for high-latency or overloaded legacy gear.
 - Add subnet batching and pause/resume for large overnight scans.
 - Add SQLite scan history so old scans can be compared against new scans.

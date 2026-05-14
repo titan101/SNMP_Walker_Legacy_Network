@@ -37,7 +37,8 @@ def index():
         "snmp_timeout_seconds": 1.2,
         "snmp_retries": 1,
         "do_ping": True,
-        "walk_details": True,
+        "walk_details": False,
+        "walk_traffic_tables": False,
         "include_community": False,
     }
 
@@ -62,6 +63,7 @@ def index():
                 workers=settings["workers"],
                 do_ping=settings["do_ping"],
                 walk_details=settings["walk_details"],
+                walk_traffic_tables=settings["walk_traffic_tables"],
             )
             elapsed = round(time.perf_counter() - started, 2)
         except ValueError as exc:
@@ -150,6 +152,7 @@ def read_settings(form) -> dict:
         "snmp_retries": clamp_int(form.get("snmp_retries"), 0, 5, 1),
         "do_ping": form.get("do_ping") == "on",
         "walk_details": form.get("walk_details") == "on",
+        "walk_traffic_tables": form.get("walk_traffic_tables") == "on",
         "include_community": form.get("include_community") == "on",
     }
 
