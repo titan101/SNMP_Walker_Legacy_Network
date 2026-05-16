@@ -113,3 +113,4 @@ snmp-walker --host 0.0.0.0 --port 5055 --production --no-browser
 - The default scan is a fast identity pass. Enable "Walk inventory MIBs" for serials, interfaces, LLDP, and CDP.
 - Enable "Walk ARP/MAC tables" only when you need endpoint-style counts; those tables can be large and slow on old switches.
 - Future feature ideas are tracked in `ROADMAP.md`.
+- Running project changes are tracked in `RELEASES.md`.
