@@ -1,6 +1,6 @@
 # SNMP Walker Legacy Network
 
-Local web app for discovering legacy network gear from pasted IPs, CIDRs, and SNMP v2c community strings.
+Small portable web app for discovering legacy network gear from pasted IPs, CIDRs, and SNMP v2c community strings.
 
 ## What it collects
 
@@ -21,7 +21,19 @@ Local web app for discovering legacy network gear from pasted IPs, CIDRs, and SN
 
 The app probes each community string against each target and uses the first one that answers. All collection is read-only SNMP v2c using community strings. CSV and Excel downloads do not include the matched community unless you turn on that option in the UI.
 
-## Run
+## Portable Layout
+
+The project is packaged so it can run from a laptop, WSL, or a small server:
+
+- `snmp_walker.discovery`: SNMP probe and walk logic
+- `snmp_walker.exports`: CSV/XLSX output
+- `snmp_walker.web`: Flask routes and UI
+- `snmp_walker.cli`: command-line/server startup
+- `wsgi.py`: WSGI entry point for external servers
+
+The old `app.py` and `snmp_discovery.py` files remain as compatibility shims.
+
+## Run Locally
 
 ### Windows PowerShell
 
@@ -47,7 +59,41 @@ chmod +x run.sh
 
 Then open http://127.0.0.1:5055.
 
-The launchers create a local `.venv`, install requirements inside it, and run the app from that environment.
+The launchers create a local `.venv`, install the package in editable mode, and run the app from that environment.
+
+## Run On A Server
+
+Bind to all interfaces with the Waitress server:
+
+```bash
+cd /path/to/SNMP_Walker_Legacy_Network
+chmod +x run_server.sh
+./run_server.sh
+```
+
+Then browse to:
+
+```text
+http://SERVER_IP:5055
+```
+
+Useful overrides:
+
+```bash
+SNMP_WALKER_HOST=0.0.0.0 SNMP_WALKER_PORT=8080 ./run_server.sh
+```
+
+Direct package command:
+
+```bash
+python -m snmp_walker --host 0.0.0.0 --port 5055 --production --no-browser
+```
+
+After `pip install -e .`, this also works:
+
+```bash
+snmp-walker --host 0.0.0.0 --port 5055 --production --no-browser
+```
 
 ## Target input examples
 

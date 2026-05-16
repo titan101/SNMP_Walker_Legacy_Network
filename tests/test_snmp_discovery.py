@@ -56,7 +56,7 @@ def test_discover_many_returns_error_row_when_worker_raises(monkeypatch):
     def broken_discover(*args, **kwargs):
         raise RuntimeError("boom")
 
-    monkeypatch.setattr("snmp_discovery.discover_one", broken_discover)
+    monkeypatch.setattr("snmp_walker.discovery.discover_one", broken_discover)
     rows = discover_many(["192.0.2.1"], ["public"], do_ping=False)
     assert rows[0].snmp_status == "error"
     assert "boom" in rows[0].snmp_error

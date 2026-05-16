@@ -1,0 +1,26 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "snmp-walker-legacy-network"
+version = "0.2.0"
+description = "Portable SNMP v2c discovery app for legacy network inventory."
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "Flask>=3.0.0",
+    "pysnmp>=7.1.0",
+    "pandas>=2.2.0",
+    "openpyxl>=3.1.0",
+    "waitress>=3.0.0",
+]
+
+[project.scripts]
+snmp-walker = "snmp_walker.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["snmp_walker*"]
+
+[tool.setuptools.package-data]
+snmp_walker = ["templates/*.html"]

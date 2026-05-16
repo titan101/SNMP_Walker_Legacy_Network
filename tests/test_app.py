@@ -1,5 +1,5 @@
-from app import app
 from snmp_discovery import DiscoveryResult
+from snmp_walker.web import app
 
 
 def test_index_get_loads():
@@ -28,7 +28,7 @@ def test_index_post_runs_fast_identity_scan_by_default(monkeypatch):
             )
         ]
 
-    monkeypatch.setattr("app.discover_many", fake_discover_many)
+    monkeypatch.setattr("snmp_walker.web.discover_many", fake_discover_many)
     client = app.test_client()
     response = client.post(
         "/",
