@@ -2,6 +2,19 @@
 
 Running project log for SNMP Walker Legacy Network. Keep this file updated whenever the app behavior, packaging, deployment method, or supported discovery scope changes.
 
+## 2026-05-18 - Portable Launcher And Cleanup Pass
+
+What changed:
+
+- Hardened `run.sh` and `run_server.sh` with clear messages for normal users on servers that are missing Python or `venv`.
+- Removed the unused duplicate root `templates/index.html`; the packaged template under `snmp_walker/templates/` is the single source of truth.
+- Updated README quick-start instructions for clone-and-run Linux server use.
+
+Validation:
+
+- `python -m pytest`
+- `python -m compileall snmp_walker app.py snmp_discovery.py wsgi.py`
+
 ## 2026-05-16 - Portable Server Package
 
 Commit: `3649810`

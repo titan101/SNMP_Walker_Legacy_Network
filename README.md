@@ -21,6 +21,47 @@ Small portable web app for discovering legacy network gear from pasted IPs, CIDR
 
 The app probes each community string against each target and uses the first one that answers. All collection is read-only SNMP v2c using community strings. CSV and Excel downloads do not include the matched community unless you turn on that option in the UI.
 
+## Beginner Quick Start
+
+You do not need admin rights for the normal launcher. Each launcher creates a local `.venv` folder inside this project and installs the Python requirements there.
+
+### Linux Server
+
+```bash
+git clone https://github.com/titan101/SNMP_Walker_Legacy_Network.git
+cd SNMP_Walker_Legacy_Network
+chmod +x run.sh run_server.sh
+./run_server.sh
+```
+
+Open:
+
+```text
+http://SERVER_IP:5055
+```
+
+### Laptop Or WSL
+
+```bash
+./run.sh
+```
+
+Open `http://127.0.0.1:5055`.
+
+### Windows
+
+PowerShell:
+
+```powershell
+.\run.ps1
+```
+
+Command Prompt:
+
+```bat
+run.bat
+```
+
 ## Portable Layout
 
 The project is packaged so it can run from a laptop, WSL, or a small server:
@@ -30,44 +71,18 @@ The project is packaged so it can run from a laptop, WSL, or a small server:
 - `snmp_walker.web`: Flask routes and UI
 - `snmp_walker.cli`: command-line/server startup
 - `wsgi.py`: WSGI entry point for external servers
+- `run.sh`: local Linux/WSL launcher using `.venv`
+- `run_server.sh`: Linux server launcher using `.venv`, `0.0.0.0`, and Waitress
+- `run.ps1` / `run.bat`: Windows launchers using `.venv`
+- `RELEASES.md`: running change notes
 
 The old `app.py` and `snmp_discovery.py` files remain as compatibility shims.
 
-## Run Locally
-
-### Windows PowerShell
-
-```powershell
-cd SNMP_Walker_Legacy_Network
-.\run.ps1
-```
-
-### Windows Command Prompt
-
-```bat
-cd /d SNMP_Walker_Legacy_Network
-run.bat
-```
-
-### WSL or Linux
-
-```bash
-cd SNMP_Walker_Legacy_Network
-chmod +x run.sh
-./run.sh
-```
-
-Then open http://127.0.0.1:5055.
-
-The launchers create a local `.venv`, install the package in editable mode, and run the app from that environment.
-
-## Run On A Server
+## Server Options
 
 Bind to all interfaces with the Waitress server:
 
 ```bash
-cd /path/to/SNMP_Walker_Legacy_Network
-chmod +x run_server.sh
 ./run_server.sh
 ```
 
@@ -83,6 +98,8 @@ Useful overrides:
 SNMP_WALKER_HOST=0.0.0.0 SNMP_WALKER_PORT=8080 ./run_server.sh
 ```
 
+If Python cannot create `.venv`, ask your server admin for Python venv support. On Ubuntu that package is usually `python3-venv`.
+
 Direct package command:
 
 ```bash
@@ -94,6 +111,13 @@ After `pip install -e .`, this also works:
 ```bash
 snmp-walker --host 0.0.0.0 --port 5055 --production --no-browser
 ```
+
+## What Was Updated
+
+- Confirmed the repo already uses the package layout and Waitress server path needed for Linux workspaces.
+- Hardened Linux launchers with clearer non-admin error messages when Python or `venv` is missing.
+- Removed an unused duplicate root template so the single source of truth is `snmp_walker/templates/index.html`.
+- Kept the UI aligned with the shared dark operations-console style used by the companion tools.
 
 ## Target input examples
 
