@@ -1,11 +1,14 @@
 .venv/
 .venv-*/
+.tools/
 venv/
 __pycache__/
 *.py[cod]
 .pytest_cache/
 .coverage
 htmlcov/
+build/
+dist/
 *.csv
 *.xlsx
 *.log

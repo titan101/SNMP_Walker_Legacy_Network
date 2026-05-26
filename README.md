@@ -60,15 +60,19 @@ To bind to all interfaces (serve to other machines on the network):
 
 ```bash
 chmod +x run.sh run_server.sh
-./run.sh          # laptop/WSL — binds 127.0.0.1, opens browser
-./run_server.sh   # server — binds 0.0.0.0, Waitress
+./run.sh          # laptop/WSL - binds 127.0.0.1, opens browser
+./run_server.sh   # server - binds 0.0.0.0, Waitress
 ```
 
 ```text
 http://SERVER_IP:5055
 ```
 
-**WSL alongside Windows:** if you ran `run.bat` first, `.venv` is a Windows environment. The bash launchers detect this automatically and create `.venv-wsl` for the Linux side — no manual steps needed. Both venvs share the same source checkout.
+**WSL alongside Windows:** if you ran `run.bat` first, `.venv` is a Windows environment. The bash launchers detect this automatically and create `.venv-wsl` for the Linux side - no manual steps needed. Both venvs share the same source checkout.
+
+**WSL from `/mnt/c` or OneDrive:** the Bash launchers automatically place the Linux venv under `~/.cache/snmp-walker/venvs/` instead of inside the Windows-mounted checkout. This avoids slow or stuck imports from a Windows filesystem. For the cleanest WSL experience, clone the repo under your Linux home directory, for example `~/SNMP_Walker_Legacy_Network`.
+
+When WSL is running from `/mnt/c`, the launcher also builds the package from a clean source copy under `~/.cache/snmp-walker/build-src/`. That avoids OneDrive or Windows permission errors from Python build metadata like `*.egg-info`.
 
 ## Portable Layout
 
@@ -111,13 +115,17 @@ SNMP_WALKER_VENV=.venv-wsl ./run_server.sh
 SNMP_WALKER_FORCE_INSTALL=1 ./run_server.sh
 SNMP_WALKER_SKIP_INSTALL=1 ./run_server.sh
 SNMP_WALKER_UPGRADE_PIP=1 ./run_server.sh
+SNMP_WALKER_UV_AUTO_INSTALL=0 ./run_server.sh
+SNMP_WALKER_EDITABLE=1 ./run_server.sh
 ```
 
 Use `SNMP_WALKER_SKIP_INSTALL=1` only after the `.venv` has already been built. It is handy on a server where the app is installed but PyPI access is blocked later.
 
 Use `SNMP_WALKER_VENV=.venv-wsl` if you want WSL to keep a separate virtual environment in a shared checkout.
 
-If Python cannot create `.venv`, ask your server admin for Python venv support. On Ubuntu that package is usually `python3-venv`.
+If Python cannot create a complete `.venv` because Ubuntu is missing `ensurepip` or `python3-venv`, the Bash launchers automatically install a local `uv` binary and use it to finish the venv setup without sudo. For normal Linux paths this lives under `.tools/uv/`; for WSL runs from `/mnt/c`, it lives under `~/.cache/snmp-walker/tools/uv/`. That still needs outbound HTTPS access to download `uv` and Python packages.
+
+If the server cannot reach the internet at all, build the `.venv` on a similar Linux machine first, copy it with the checkout, and run with `SNMP_WALKER_SKIP_INSTALL=1`.
 
 If the app starts but you cannot reach it from another machine, the server firewall may need to allow TCP/5055 or whichever port you choose.
 
@@ -138,6 +146,8 @@ snmp-walker --host 0.0.0.0 --port 5055 --production --no-browser
 - `run.sh` is for local laptop or WSL use and binds to `127.0.0.1:5055` by default.
 - `run_server.sh` is for Linux servers and binds to `0.0.0.0:5055` with Waitress by default.
 - Launchers create a project-local `.venv`; no `sudo pip install` or system Python changes are needed.
+- If `python3 -m venv` creates a venv without pip, the Bash launchers bootstrap a local `uv` installer and use `uv pip install` instead.
+- Linux installs copy the app into the venv by default for reliable server startup. Set `SNMP_WALKER_EDITABLE=1` only when developing the code.
 - `SNMP_WALKER_VENV` lets different Linux or WSL runs keep separate local virtual environments in the same checkout.
 - Re-run with `SNMP_WALKER_FORCE_INSTALL=1` after dependency trouble or a major Python change.
 

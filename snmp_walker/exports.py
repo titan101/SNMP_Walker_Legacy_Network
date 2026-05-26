@@ -3,7 +3,8 @@ from __future__ import annotations
 import csv
 import io
 
-import pandas as pd
+from openpyxl import Workbook
+from openpyxl.worksheet.worksheet import Worksheet
 
 from .discovery import DiscoveryResult, EXPORT_COLUMNS, MIB_WALK_PLAN, topology_context_lines, topology_edges
 
@@ -51,27 +52,22 @@ def results_to_csv(results: list[DiscoveryResult], include_community: bool = Fal
 
 def results_to_xlsx(results: list[DiscoveryResult], include_community: bool = False) -> bytes:
     payload = io.BytesIO()
-    with pd.ExcelWriter(payload, engine="openpyxl") as writer:
-        write_sheet(
-            writer,
-            "Devices",
-            [result.public_dict(include_community=include_community) for result in results],
-            export_columns(include_community),
-        )
-        write_sheet(writer, "MIB Walk Plan", MIB_WALK_PLAN, MIB_PLAN_COLUMNS)
-        write_sheet(writer, "Walk Status", flatten_detail_rows(results, "walk_errors"), WALK_STATUS_COLUMNS)
-        write_sheet(writer, "Interfaces", flatten_detail_rows(results, "interface_rows"), INTERFACE_COLUMNS)
-        write_sheet(writer, "Entities", flatten_detail_rows(results, "entity_rows"), ENTITY_COLUMNS)
-        write_sheet(writer, "Neighbors", flatten_detail_rows(results, "neighbor_rows"), NEIGHBOR_COLUMNS)
-        write_sheet(writer, "Topology", topology_edges(results), TOPOLOGY_COLUMNS)
-        write_sheet(writer, "Topology Context", topology_context_lines(results), TOPOLOGY_CONTEXT_COLUMNS)
+    workbook = Workbook()
+    write_sheet(
+        workbook.active,
+        "Devices",
+        [result.public_dict(include_community=include_community) for result in results],
+        export_columns(include_community),
+    )
+    write_sheet(workbook.create_sheet(), "MIB Walk Plan", MIB_WALK_PLAN, MIB_PLAN_COLUMNS)
+    write_sheet(workbook.create_sheet(), "Walk Status", flatten_detail_rows(results, "walk_errors"), WALK_STATUS_COLUMNS)
+    write_sheet(workbook.create_sheet(), "Interfaces", flatten_detail_rows(results, "interface_rows"), INTERFACE_COLUMNS)
+    write_sheet(workbook.create_sheet(), "Entities", flatten_detail_rows(results, "entity_rows"), ENTITY_COLUMNS)
+    write_sheet(workbook.create_sheet(), "Neighbors", flatten_detail_rows(results, "neighbor_rows"), NEIGHBOR_COLUMNS)
+    write_sheet(workbook.create_sheet(), "Topology", topology_edges(results), TOPOLOGY_COLUMNS)
+    write_sheet(workbook.create_sheet(), "Topology Context", topology_context_lines(results), TOPOLOGY_CONTEXT_COLUMNS)
 
-        for worksheet in writer.sheets.values():
-            worksheet.freeze_panes = "A2"
-            for column_cells in worksheet.columns:
-                values = [str(cell.value or "") for cell in column_cells]
-                width = min(max((len(value) for value in values), default=10) + 2, 48)
-                worksheet.column_dimensions[column_cells[0].column_letter].width = width
+    workbook.save(payload)
     payload.seek(0)
     return payload.getvalue()
 
@@ -91,6 +87,21 @@ def flatten_detail_rows(results: list[DiscoveryResult], field_name: str) -> list
     return rows
 
 
-def write_sheet(writer: pd.ExcelWriter, sheet_name: str, rows: list[dict[str, str]], columns: list[str]) -> None:
-    frame = pd.DataFrame(rows, columns=columns)
-    frame.to_excel(writer, sheet_name=sheet_name, index=False)
+def write_sheet(worksheet: Worksheet, sheet_name: str, rows: list[dict[str, str]], columns: list[str]) -> None:
+    worksheet.title = sheet_name
+    worksheet.append(columns)
+    for row in rows:
+        worksheet.append([safe_cell_value(row.get(column, "")) for column in columns])
+    worksheet.freeze_panes = "A2"
+    for column_cells in worksheet.columns:
+        values = [str(cell.value or "") for cell in column_cells]
+        width = min(max((len(value) for value in values), default=10) + 2, 48)
+        worksheet.column_dimensions[column_cells[0].column_letter].width = width
+
+
+def safe_cell_value(value) -> str | int | float | bool:
+    if value is None:
+        return ""
+    if isinstance(value, (str, int, float, bool)):
+        return value
+    return str(value)

@@ -2,6 +2,29 @@
 
 Running project log for SNMP Walker Legacy Network. Keep this file updated whenever the app behavior, packaging, deployment method, or supported discovery scope changes.
 
+## 2026-05-26 - No-Admin WSL Bootstrap Fallback
+
+What changed:
+
+- Added a shared Bash bootstrap helper used by `run.sh` and `run_server.sh`.
+- If Ubuntu/WSL Python is missing `ensurepip` or `python3-venv`, the launchers now bootstrap a local `uv` binary instead of stopping immediately.
+- WSL runs launched from `/mnt/c` keep both the venv and local `uv` tool under `~/.cache/snmp-walker/` instead of the Windows-mounted checkout.
+- WSL `/mnt/c` installs now build from a clean Linux-cache source copy to avoid OneDrive/Windows permission failures around `*.egg-info`.
+- Dependency installation now uses normal venv pip when available, or `uv pip install --python .venv/bin/python .` when pip is missing.
+- Reinstall checks now use a source checksum instead of filesystem mtimes, which avoids repeat installs from Windows-mounted WSL paths.
+- Linux installs now copy the app into the venv by default; `SNMP_WALKER_EDITABLE=1` restores editable install behavior for development.
+- Replaced the pandas Excel writer with direct `openpyxl` workbook generation to avoid the heavy pandas/numpy dependency chain on WSL/server installs.
+- Added `.tools/` to `.gitignore` so the downloaded local bootstrap binary is not committed.
+- Documented the no-admin fallback controls: `SNMP_WALKER_UV`, `SNMP_WALKER_UV_AUTO_INSTALL`, and `SNMP_WALKER_TOOLS_DIR`.
+
+Validation:
+
+- Fresh WSL clone reproduced the missing `ensurepip` failure and then completed setup through the local `uv` fallback.
+- `python -m pytest -q`
+- `python -m compileall snmp_walker`
+- `bash -n run.sh`
+- `bash -n run_server.sh`
+
 ## 2026-05-24 - No-Admin Server Readiness Pass
 
 What changed:

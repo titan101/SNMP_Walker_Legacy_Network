@@ -11,8 +11,15 @@ if [ -f .env ]; then
   set +a
 fi
 
+# shellcheck disable=SC1091
+. ./scripts/bootstrap_env.sh
+
 PYTHON_BIN="${SNMP_WALKER_PYTHON:-python3}"
-VENV_DIR="${SNMP_WALKER_VENV:-.venv}"
+VENV_DIR="${SNMP_WALKER_VENV:-$(snmp_walker_default_venv_dir)}"
+
+if [ -z "${SNMP_WALKER_VENV:-}" ] && [ "$VENV_DIR" != ".venv" ]; then
+  echo "Note: running from a Windows-mounted WSL path; using Linux-side venv $VENV_DIR." >&2
+fi
 
 # If .venv is a Windows venv (Scripts/ but no bin/), auto-switch to .venv-wsl
 if [ "$VENV_DIR" = ".venv" ] && [ -d ".venv/Scripts" ] && [ ! -d ".venv/bin" ]; then
@@ -34,39 +41,7 @@ if ! "$PYTHON_BIN" -c "import sys; raise SystemExit(0 if sys.version_info >= (3,
   exit 1
 fi
 
-if [ ! -d "$VENV_DIR" ]; then
-  if ! "$PYTHON_BIN" -m venv "$VENV_DIR"; then
-    echo "Could not create $VENV_DIR. Ask your server admin to enable the Python venv module." >&2
-    exit 1
-  fi
-fi
-
-if [ ! -x "$VENV_PYTHON" ]; then
-  echo "$VENV_DIR does not look like a Linux/WSL virtual environment." >&2
-  echo "Use SNMP_WALKER_VENV=.venv-wsl ./run.sh, or remove the incompatible venv." >&2
-  exit 1
-fi
-
-needs_install=0
-if [ ! -f "$INSTALL_STAMP" ]; then
-  needs_install=1
-elif [ "pyproject.toml" -nt "$INSTALL_STAMP" ] || [ "requirements.txt" -nt "$INSTALL_STAMP" ]; then
-  needs_install=1
-fi
-
-if [ "${SNMP_WALKER_FORCE_INSTALL:-0}" = "1" ]; then
-  needs_install=1
-fi
-if [ "${SNMP_WALKER_SKIP_INSTALL:-0}" = "1" ]; then
-  needs_install=0
-fi
-
-if [ "$needs_install" = "1" ]; then
-  if [ "${SNMP_WALKER_UPGRADE_PIP:-0}" = "1" ]; then
-    "$VENV_PYTHON" -m pip install --upgrade pip
-  fi
-  "$VENV_PYTHON" -m pip install -e .
-  touch "$INSTALL_STAMP"
-fi
+snmp_walker_ensure_venv
+snmp_walker_install_project
 
 exec "$VENV_PYTHON" -m snmp_walker "$@"
