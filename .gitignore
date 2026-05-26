@@ -1,4 +1,5 @@
 .venv/
+.venv-*/
 venv/
 __pycache__/
 *.py[cod]
@@ -8,6 +9,8 @@ htmlcov/
 *.csv
 *.xlsx
 *.log
+snmp_walker_local_*.out
+snmp_walker_local_*.err
 .env
 *.egg-info/
 .DS_Store

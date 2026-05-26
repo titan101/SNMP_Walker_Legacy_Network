@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "snmp-walker-legacy-network"
 version = "0.2.0"
-description = "Portable SNMP v2c discovery app for legacy network inventory."
+description = "Portable SNMP discovery app for legacy network inventory."
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [

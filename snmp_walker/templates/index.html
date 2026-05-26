@@ -4,6 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>SNMP Discovery</title>
+  <script src="https://unpkg.com/vis-network@9.1.9/standalone/umd/vis-network.min.js"></script>
   <style>
     :root {
       color-scheme: dark;
@@ -165,6 +166,25 @@
       color: #ffd1d1;
       background: rgba(255, 123, 123, 0.1);
     }
+    .notice {
+      margin: 14px;
+      padding: 10px 12px;
+      border: 1px solid rgba(255, 189, 107, 0.36);
+      border-radius: 6px;
+      color: #ffe0b6;
+      background: rgba(255, 189, 107, 0.1);
+    }
+    .notice p + p { margin-top: 5px; }
+    .loading {
+      display: none;
+      margin: 14px;
+      padding: 10px 12px;
+      border: 1px solid rgba(104, 167, 255, 0.36);
+      border-radius: 6px;
+      color: #cfe1ff;
+      background: rgba(104, 167, 255, 0.1);
+    }
+    .loading.active { display: block; }
     .summary {
       display: grid;
       grid-template-columns: repeat(6, minmax(0, 1fr));
@@ -182,6 +202,38 @@
     .metric strong { display: block; font-size: 20px; line-height: 1; margin-bottom: 5px; }
     .metric span { color: var(--muted); font-size: 12px; font-weight: 700; }
     .table-wrap { overflow: auto; max-height: calc(100vh - 218px); }
+    .topology {
+      border-bottom: 1px solid var(--line);
+      background: #0d141a;
+    }
+    .topology-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 12px 14px 0;
+    }
+    .topology-wrap {
+      overflow: auto;
+      padding: 10px 14px 14px;
+    }
+    .adjacency-list {
+      margin: 0 14px 14px;
+      padding: 10px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #081016;
+      color: var(--ink);
+      font: 12px/1.5 Consolas, "Courier New", monospace;
+      overflow: auto;
+      white-space: pre;
+    }
+    .topo-canvas {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #081016;
+      height: 420px;
+    }
     table { width: 100%; border-collapse: collapse; min-width: 1760px; }
     th, td {
       padding: 9px 10px;
@@ -221,6 +273,69 @@
       color: var(--muted);
     }
     .download-form { display: inline; }
+    .mib-plan {
+      border-top: 1px solid var(--line);
+      background: #0d141a;
+    }
+    .mib-wrap {
+      overflow: auto;
+      max-height: 360px;
+    }
+    .mib-plan table {
+      min-width: 760px;
+    }
+    .mib-plan th,
+    .mib-plan td {
+      padding: 7px 9px;
+      font-size: 12px;
+    }
+    .mib-plan th {
+      top: 0;
+    }
+    .mib-select {
+      display: flex;
+      justify-content: center;
+    }
+    .mib-select input {
+      width: 16px;
+      height: 16px;
+      padding: 0;
+    }
+    .mib-mode {
+      display: inline-flex;
+      min-width: 72px;
+      justify-content: center;
+      border-radius: 999px;
+      padding: 2px 7px;
+      color: #06110f;
+      background: var(--accent);
+      font-weight: 900;
+      text-transform: uppercase;
+    }
+    .mib-mode.inventory { background: var(--accent-2); color: #06101f; }
+    .mib-mode.topology { background: var(--warn); color: #201305; }
+    .mib-mode.traffic { background: #c9a6ff; color: #160821; }
+    select {
+      height: 38px;
+      padding: 0 8px;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      background: var(--field);
+      color: var(--ink);
+      font: inherit;
+      width: 100%;
+    }
+    select:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(53, 194, 162, 0.14); }
+    .v3-section {
+      display: none;
+      gap: 10px;
+      flex-direction: column;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      padding: 10px;
+      background: #0c1217;
+    }
+    .v3-section.active { display: flex; }
     @media (max-width: 980px) {
       header { align-items: flex-start; flex-direction: column; }
       main { grid-template-columns: 1fr; }
@@ -254,15 +369,40 @@
       {% if error %}
         <div class="error">{{ error }}</div>
       {% endif %}
-      <form class="scan" method="post">
+      <div class="loading" id="scan-loading">Scan running. Results return after all target and community timeouts finish.</div>
+      <form class="scan" method="post" id="scan-form">
+        <input type="hidden" name="oid_selection_present" value="1">
         <label>
           Targets
           <textarea name="targets" spellcheck="false">{{ targets }}</textarea>
         </label>
         <label>
-          Community strings
+          Community strings (v1/v2c)
           <textarea name="communities" spellcheck="false">{{ communities }}</textarea>
         </label>
+        <div class="checks">
+          <span style="color:var(--muted);font-size:12px;font-weight:700;margin-right:4px;">SNMP Versions</span>
+          <label class="check"><input type="checkbox" name="snmp_versions" value="v2c" id="ver-v2c" {% if 'v2c' in settings.snmp_versions %}checked{% endif %}> v2c</label>
+          <label class="check"><input type="checkbox" name="snmp_versions" value="v1" id="ver-v1" {% if 'v1' in settings.snmp_versions %}checked{% endif %}> v1</label>
+          <label class="check"><input type="checkbox" name="snmp_versions" value="v3" id="ver-v3" {% if 'v3' in settings.snmp_versions %}checked{% endif %}> v3</label>
+        </div>
+        <div class="v3-section {% if 'v3' in settings.snmp_versions %}active{% endif %}" id="v3-section">
+          <label>v3 Username<input type="text" name="v3_username" value="{{ settings.v3_username }}" autocomplete="off"></label>
+          <div class="grid-4">
+            <label>Auth Protocol<select name="v3_auth_protocol">
+              {% for p in ['SHA','MD5','SHA256','NONE'] %}
+                <option value="{{ p }}" {% if settings.v3_auth_protocol == p %}selected{% endif %}>{{ p }}</option>
+              {% endfor %}
+            </select></label>
+            <label>Auth Key<input type="password" name="v3_auth_key" value="{{ settings.v3_auth_key }}" autocomplete="new-password"></label>
+            <label>Priv Protocol<select name="v3_priv_protocol">
+              {% for p in ['AES','DES','NONE'] %}
+                <option value="{{ p }}" {% if settings.v3_priv_protocol == p %}selected{% endif %}>{{ p }}</option>
+              {% endfor %}
+            </select></label>
+            <label>Priv Key<input type="password" name="v3_priv_key" value="{{ settings.v3_priv_key }}" autocomplete="new-password"></label>
+          </div>
+        </div>
         <div class="grid-4">
           <label>Max hosts<input type="number" name="max_hosts" min="1" max="65536" value="{{ settings.max_hosts }}"></label>
           <label>Workers<input type="number" name="workers" min="1" max="128" value="{{ settings.workers }}"></label>
@@ -280,16 +420,54 @@
         </div>
         <div class="actions">
           <button class="primary" type="submit">Run discovery</button>
-          <span class="hint">SNMP v2c on UDP/161. Inventory and ARP/MAC walks are optional for slower legacy gear.</span>
+          <span class="hint">SNMP v1/v2c/v3 on UDP/161. Inventory and ARP/MAC walks are optional for slower legacy gear.</span>
         </div>
       </form>
+      <div class="mib-plan">
+        <div class="panel-head">
+          <div>
+            <h2>MIB/OID Coverage</h2>
+            <p class="subtitle">Select exactly which OIDs are eligible to run. Inventory/topology and traffic still follow the scan checkboxes.</p>
+          </div>
+        </div>
+        <div class="mib-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Run</th>
+                <th>Mode</th>
+                <th>Op</th>
+                <th>MIB</th>
+                <th>Object</th>
+                <th>OID</th>
+                <th>Collects</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for mib in mib_walk_plan %}
+                <tr>
+                  <td class="mib-select">
+                    <input form="scan-form" type="checkbox" name="selected_oids" value="{{ mib.oid }}" {% if mib.oid in settings.selected_oids %}checked{% endif %}>
+                  </td>
+                  <td><span class="mib-mode {{ mib.mode }}">{{ mib.mode }}</span></td>
+                  <td>{{ mib.operation }}</td>
+                  <td>{{ mib.mib }}</td>
+                  <td>{{ mib.name }}</td>
+                  <td class="mono">{{ mib.oid }}</td>
+                  <td>{{ mib.collects }}</td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
     </section>
 
     <section>
       <div class="panel-head">
         <div>
           <h2>Results</h2>
-          <p class="subtitle">Use CSV for quick cleanup or XLSX for Excel handoff.</p>
+          <p class="subtitle">Use CSV for quick cleanup or XLSX for the full workbook.</p>
         </div>
         {% if results %}
           <div class="actions">
@@ -301,13 +479,20 @@
             <form class="download-form" method="post" action="/download/xlsx">
               <input type="hidden" name="results_json" value='{{ results_json|e }}'>
               {% if settings.include_community %}<input type="hidden" name="include_community" value="on">{% endif %}
-              <button class="secondary" type="submit">Excel</button>
+              <button class="secondary" type="submit">Excel workbook</button>
             </form>
           </div>
         {% endif %}
       </div>
 
       {% if results %}
+        {% if diagnostics %}
+          <div class="notice">
+            {% for message in diagnostics %}
+              <p>{{ message }}</p>
+            {% endfor %}
+          </div>
+        {% endif %}
         <div class="summary">
           <div class="metric"><strong>{{ summary.targets }}</strong><span>Targets</span></div>
           <div class="metric"><strong>{{ summary.pingable }}</strong><span>Pingable</span></div>
@@ -315,6 +500,25 @@
           <div class="metric"><strong>{{ summary.models }}</strong><span>Models Found</span></div>
           <div class="metric"><strong>{{ summary.serials }}</strong><span>Serials</span></div>
           <div class="metric"><strong>{{ summary.neighbors }}</strong><span>Neighbors</span></div>
+        </div>
+        <div class="topology">
+          <div class="topology-head">
+            <div>
+              <h2>Topology</h2>
+              {% if topology.edges %}
+                <p class="subtitle">{{ summary.topology_edges }} LLDP/CDP edges — drag nodes, scroll to zoom</p>
+              {% else %}
+                <p class="subtitle">No map yet. Enable "Walk inventory MIBs" and keep LLDP/CDP OIDs selected, then scan devices that expose neighbor tables.</p>
+              {% endif %}
+            </div>
+          </div>
+          <div class="topology-wrap">
+            <div id="topo-canvas" class="topo-canvas" {% if not topology.edges %}style="display:none"{% endif %}></div>
+          </div>
+          {% if topology.context_lines %}
+            <pre class="adjacency-list">{% for row in topology.context_lines %}{{ row.line }}
+{% endfor %}</pre>
+          {% endif %}
         </div>
         <div class="table-wrap">
           <table>
@@ -365,5 +569,81 @@
       {% endif %}
     </section>
   </main>
+  <script>
+    // Scan form submit feedback
+    const scanForm = document.getElementById("scan-form");
+    const scanLoading = document.getElementById("scan-loading");
+    if (scanForm && scanLoading) {
+      scanForm.addEventListener("submit", () => {
+        scanLoading.classList.add("active");
+        const button = scanForm.querySelector("button[type='submit']");
+        if (button) {
+          button.disabled = true;
+          button.textContent = "Scanning";
+        }
+      });
+    }
+
+    // v3 checkbox — show/hide credentials section
+    (function () {
+      const v3Box = document.getElementById("ver-v3");
+      const v3Section = document.getElementById("v3-section");
+      if (!v3Box || !v3Section) return;
+      v3Box.addEventListener("change", function () {
+        v3Section.classList.toggle("active", this.checked);
+      });
+    })();
+
+    // vis.js topology
+    {% if topology.edges %}
+    (function () {
+      var raw = {{ topology | tojson }};
+      var nodeMap = {};
+      raw.nodes.forEach(function (n) {
+        nodeMap[n.label] = {
+          id: n.label,
+          label: n.display_label,
+          group: n.role,
+          title: n.label
+        };
+      });
+      var visNodes = new vis.DataSet(Object.values(nodeMap));
+      var visEdges = new vis.DataSet(raw.edges.map(function (e) {
+        var title = [e.source_port, e.target_port].filter(Boolean).join(" ↔ ") || undefined;
+        return {
+          from: e.source,
+          to: e.target,
+          label: e.display_label || "",
+          title: title,
+          arrows: {to: {enabled: false}}
+        };
+      }));
+      var container = document.getElementById("topo-canvas");
+      if (!container) return;
+      new vis.Network(container, {nodes: visNodes, edges: visEdges}, {
+        nodes: {
+          shape: "box",
+          margin: 8,
+          font: {color: "#eef4f8", size: 12, face: "Segoe UI, Arial, sans-serif"},
+          borderWidth: 1,
+          shadow: false
+        },
+        edges: {
+          font: {color: "#96a9b7", size: 10, align: "middle"},
+          color: {color: "#68a7ff", opacity: 0.75},
+          smooth: {type: "dynamic"},
+          width: 2
+        },
+        groups: {
+          scanned: {color: {background: "#12322d", border: "rgba(53,194,162,0.8)", highlight: {background: "#1a3f38", border: "#35c2a2"}}},
+          neighbor: {color: {background: "#13202a", border: "#263847", highlight: {background: "#1c2e3d", border: "#68a7ff"}}}
+        },
+        physics: {enabled: true, solver: "barnesHut", barnesHut: {gravitationalConstant: -4000, springLength: 140}},
+        interaction: {hover: true, tooltipDelay: 150, navigationButtons: false, keyboard: false},
+        layout: {improvedLayout: true}
+      });
+    })();
+    {% endif %}
+  </script>
 </body>
 </html>

@@ -2,6 +2,34 @@
 
 Running project log for SNMP Walker Legacy Network. Keep this file updated whenever the app behavior, packaging, deployment method, or supported discovery scope changes.
 
+## 2026-05-24 - No-Admin Server Readiness Pass
+
+What changed:
+
+- Hardened target parsing so oversized CIDRs stop at the configured host limit without expanding the full network into memory.
+- Made download payload parsing ignore malformed rows and unknown fields instead of raising a server error.
+- Updated Bash launchers to check Python 3.10+, create a project-local `.venv`, and skip repeated installs after the first successful setup.
+- Added launcher flags for no-admin environments: `SNMP_WALKER_PYTHON`, `SNMP_WALKER_VENV`, `SNMP_WALKER_FORCE_INSTALL`, `SNMP_WALKER_SKIP_INSTALL`, and `SNMP_WALKER_UPGRADE_PIP`.
+- Updated README server instructions for WSL, Linux servers, stripped execute bits, firewall notes, and local venv reuse.
+- Removed PowerShell/Batch launchers, old compatibility entry shims, the optional WSGI shim, and the roadmap file from the active Linux-focused tree.
+- Added structured walk-detail storage for interfaces, ENTITY-MIB inventory rows, and LLDP/CDP neighbor rows.
+- Expanded Excel export into a multi-sheet workbook: devices, interfaces, entities, neighbors, and topology edges.
+- Added a simple LLDP/CDP topology view to the results page when inventory walks expose neighbor tables.
+- Borrowed the NetworkAI adjacency-list pattern: topology now carries source/target interfaces, protocol, inferred link type, bandwidth, and a plain-text `Topology Context` sheet.
+- Added visible MIB/OID coverage in the scan UI plus `MIB Walk Plan` and `Walk Status` workbook sheets.
+- Added scan-running feedback and no-responder diagnostics for subnet scans that return no SNMP devices.
+- Added per-OID scan selection so operators can choose exactly which base, inventory, topology, and traffic OIDs are eligible to run.
+- Added an explicit topology empty-state explaining when LLDP/CDP data is needed before a map can be drawn.
+
+Validation:
+
+- `python -m pytest -q`: 22 passed.
+- `python -m compileall snmp_walker`
+- `bash -n run.sh`
+- `bash -n run_server.sh`
+- Flask dev `/health` smoke test passed from `.venv`.
+- Waitress production `/health` smoke test passed from `.venv`.
+
 ## 2026-05-18 - Portable Launcher And Cleanup Pass
 
 What changed:

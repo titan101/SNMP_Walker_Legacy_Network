@@ -1,5 +1,10 @@
-from snmp_discovery import DiscoveryResult
+import io
+
+from openpyxl import load_workbook
+
+from snmp_walker.discovery import DiscoveryResult
 from snmp_walker.web import app
+from snmp_walker.web import deserialize_results
 
 
 def test_index_get_loads():
@@ -7,6 +12,10 @@ def test_index_get_loads():
     response = client.get("/")
     assert response.status_code == 200
     assert b"SNMP Discovery" in response.data
+    assert b"MIB/OID Coverage" in response.data
+    assert b"sysDescr.0" in response.data
+    assert b"Scan running" in response.data
+    assert b'name="selected_oids"' in response.data
 
 
 def test_index_post_runs_fast_identity_scan_by_default(monkeypatch):
@@ -49,6 +58,94 @@ def test_index_post_runs_fast_identity_scan_by_default(monkeypatch):
     assert captured["communities"] == ["public"]
     assert captured["kwargs"]["walk_details"] is False
     assert captured["kwargs"]["walk_traffic_tables"] is False
+    assert "1.3.6.1.2.1.1.1.0" in captured["kwargs"]["selected_oids"]
+
+
+def test_index_post_passes_selected_oids(monkeypatch):
+    captured = {}
+
+    def fake_discover_many(targets, communities, **kwargs):
+        captured["kwargs"] = kwargs
+        return [DiscoveryResult(ip="192.0.2.1", snmp_status="failed")]
+
+    monkeypatch.setattr("snmp_walker.web.discover_many", fake_discover_many)
+    client = app.test_client()
+    response = client.post(
+        "/",
+        data={
+            "targets": "192.0.2.1",
+            "communities": "public",
+            "oid_selection_present": "1",
+            "selected_oids": ["1.3.6.1.2.1.1.1.0", "1.0.8802.1.1.2.1.4.1.1.9"],
+        },
+    )
+    assert response.status_code == 200
+    assert captured["kwargs"]["selected_oids"] == [
+        "1.3.6.1.2.1.1.1.0",
+        "1.0.8802.1.1.2.1.4.1.1.9",
+    ]
+
+
+def test_index_post_requires_one_base_oid():
+    client = app.test_client()
+    response = client.post(
+        "/",
+        data={
+            "targets": "192.0.2.1",
+            "communities": "public",
+            "oid_selection_present": "1",
+            "selected_oids": "1.0.8802.1.1.2.1.4.1.1.9",
+        },
+    )
+    assert response.status_code == 200
+    assert b"Select at least one base GET OID" in response.data
+
+
+def test_index_post_renders_topology_when_neighbors_exist(monkeypatch):
+    def fake_discover_many(targets, communities, **kwargs):
+        return [
+            DiscoveryResult(
+                ip="192.0.2.1",
+                hostname="r1",
+                snmp_status="ok",
+                neighbor_rows=[
+                    {
+                        "ip": "192.0.2.1",
+                        "hostname": "r1",
+                        "protocol": "LLDP",
+                        "local_port": "localPort 1",
+                        "remote_device": "sw1",
+                        "remote_port": "Gi1/0/1",
+                    }
+                ],
+            )
+        ]
+
+    monkeypatch.setattr("snmp_walker.web.discover_many", fake_discover_many)
+    client = app.test_client()
+    response = client.post("/", data={"targets": "192.0.2.1", "communities": "public", "walk_details": "on"})
+    assert response.status_code == 200
+    assert b"Topology" in response.data
+    assert b"sw1" in response.data
+
+
+def test_index_post_shows_no_snmp_diagnostic(monkeypatch):
+    def fake_discover_many(targets, communities, **kwargs):
+        return [
+            DiscoveryResult(
+                ip="192.0.2.1",
+                pingable_or_not="no",
+                snmp_status="failed",
+                snmp_error="No SNMP response received before timeout",
+            )
+        ]
+
+    monkeypatch.setattr("snmp_walker.web.discover_many", fake_discover_many)
+    client = app.test_client()
+    response = client.post("/", data={"targets": "192.0.2.1", "communities": "public", "do_ping": "on"})
+    assert response.status_code == 200
+    assert b"No SNMP responders were found" in response.data
+    assert b"No targets answered ICMP ping" in response.data
 
 
 def test_download_csv_from_result_payload():
@@ -62,3 +159,55 @@ def test_download_csv_from_result_payload():
     assert response.status_code == 200
     assert response.headers["Content-Type"].startswith("text/csv")
     assert b"192.0.2.1" in response.data
+
+
+def test_download_xlsx_includes_walk_detail_sheets():
+    client = app.test_client()
+    response = client.post(
+        "/download/xlsx",
+        data={
+            "results_json": (
+                '[{"ip":"192.0.2.1","hostname":"r1","snmp_status":"ok",'
+                '"interface_rows":[{"ip":"192.0.2.1","hostname":"r1","if_index":"1","description":"Gi0/0","oper_status":"up"}],'
+                '"entity_rows":[{"ip":"192.0.2.1","hostname":"r1","entity_index":"1","model":"ASR9000","serial":"ABC12345"}],'
+                '"neighbor_rows":[{"ip":"192.0.2.1","hostname":"r1","protocol":"LLDP","local_port":"localPort 1","remote_device":"sw1","remote_port":"Gi1/0/1"}],'
+                '"walk_errors":[{"ip":"192.0.2.1","hostname":"r1","mode":"inventory","mib":"IF-MIB","name":"ifDescr","oid":"1.3.6.1.2.1.2.2.1.2","operation":"WALK","rows":"1","status":"ok","error":""}]}]'
+            ),
+        },
+    )
+    assert response.status_code == 200
+    workbook = load_workbook(io.BytesIO(response.data), read_only=True)
+    assert workbook.sheetnames == [
+        "Devices",
+        "MIB Walk Plan",
+        "Walk Status",
+        "Interfaces",
+        "Entities",
+        "Neighbors",
+        "Topology",
+        "Topology Context",
+    ]
+    assert workbook["MIB Walk Plan"]["D2"].value == "sysDescr.0"
+    assert workbook["Walk Status"]["I2"].value == "ok"
+    assert workbook["Interfaces"]["D2"].value == "Gi0/0"
+    assert workbook["Entities"]["F2"].value == "ABC12345"
+    assert workbook["Topology"]["D2"].value == "sw1"
+    assert workbook["Topology Context"]["A2"].value == "r1 [localPort 1] <-> [Gi1/0/1] sw1 (LLDP)"
+
+
+def test_deserialize_results_ignores_bad_download_payload_rows():
+    rows = deserialize_results(
+        '[{"ip":"192.0.2.1","hostname":"r1","extra":"ignored"},'
+        '{"hostname":"missing-ip"},'
+        '"bad-row"]'
+    )
+    assert len(rows) == 1
+    assert rows[0].ip == "192.0.2.1"
+    assert rows[0].hostname == "r1"
+
+
+def test_deserialize_results_preserves_walk_detail_rows():
+    rows = deserialize_results(
+        '[{"ip":"192.0.2.1","interface_rows":[{"if_index":1,"description":"Gi0/0"}]}]'
+    )
+    assert rows[0].interface_rows == [{"if_index": "1", "description": "Gi0/0"}]

@@ -11,6 +11,7 @@ class ServerConfig:
     open_browser: bool = True
     debug: bool = False
     production: bool = False
+    default_communities: str = ""
 
     @classmethod
     def from_env(cls) -> "ServerConfig":
@@ -20,6 +21,7 @@ class ServerConfig:
             open_browser=parse_bool(os.getenv("SNMP_WALKER_OPEN_BROWSER"), True),
             debug=parse_bool(os.getenv("SNMP_WALKER_DEBUG"), False),
             production=parse_bool(os.getenv("SNMP_WALKER_PRODUCTION"), False),
+            default_communities=os.getenv("SNMP_WALKER_COMMUNITIES", ""),
         )
 
 
