@@ -36,6 +36,8 @@ The Excel workbook includes multiple sheets:
 
 The scan page lets you select individual OIDs from the MIB/OID coverage table. At least one base GET OID must stay selected so the app can test which community string answers.
 
+Scans run as background jobs from the web UI. The page updates the processed/total count and shows completed IP rows while the scan is still running, then opens the full results view with topology and downloads when complete.
+
 ## Quick Start
 
 Launchers create a local `.venv` folder and install dependencies on first run. Requires Python 3.10+.
@@ -190,6 +192,7 @@ Scan activity, SNMP failures, and walk errors are written to `snmp_walker.log` i
 - ICMP ping may be blocked by firewalls even when SNMP works.
 - A laptop subnet can scan cleanly and still show zero SNMP responders if endpoints do not run SNMP, UDP/161 is filtered, or the community string is wrong.
 - Large subnets can take time; tune workers and timeouts in the form.
+- While a scan is running, completed IP rows appear in the live progress table. The full results page opens automatically after the background scan finishes.
 - The scan page shows the full MIB/OID coverage table before you run a scan.
 - Uncheck OIDs in the MIB/OID coverage table to skip them. The inventory/topology and ARP/MAC mode checkboxes still control whether those groups are eligible to run.
 - The default scan is a fast identity pass. Enable "Walk inventory MIBs" for serials, interfaces, LLDP, and CDP.

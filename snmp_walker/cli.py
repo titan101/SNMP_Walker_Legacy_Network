@@ -53,7 +53,7 @@ def main(argv: list[str] | None = None) -> None:
 
         serve(app, host=host, port=port)
     else:
-        app.run(host=host, port=port, debug=debug)
+        app.run(host=host, port=port, debug=debug, threaded=True)
 
 
 def open_browser_later(port: int) -> None:

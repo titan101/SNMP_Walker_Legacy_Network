@@ -1,10 +1,13 @@
 from __future__ import annotations
 
 import io
+import ipaddress
 import json
 import logging
+import threading
 import time
-from dataclasses import asdict, fields
+import uuid
+from dataclasses import asdict, dataclass, field, fields
 from datetime import datetime
 
 from flask import Flask, render_template, request, send_file
@@ -16,6 +19,7 @@ from .discovery import (
     MIB_WALK_PLAN,
     DiscoveryResult,
     V3Credentials,
+    discover_iter,
     discover_many,
     parse_communities,
     parse_targets,
@@ -29,6 +33,24 @@ DISCOVERY_RESULT_FIELDS = {field.name for field in fields(DiscoveryResult)}
 DISCOVERY_RESULT_LIST_FIELDS = {"entity_rows", "interface_rows", "neighbor_rows", "walk_errors"}
 
 _log = logging.getLogger(__name__)
+_SCAN_JOBS: dict[str, "ScanJob"] = {}
+_SCAN_JOBS_LOCK = threading.Lock()
+_SCAN_JOB_TTL_SECONDS = 60 * 60
+
+
+@dataclass
+class ScanJob:
+    job_id: str
+    targets_text: str
+    communities_text: str
+    settings: dict
+    total: int
+    started: float
+    status: str = "running"
+    error: str = ""
+    elapsed: float | None = None
+    results: list[DiscoveryResult] = field(default_factory=list)
+    lock: threading.Lock = field(default_factory=threading.Lock)
 
 
 def create_app() -> Flask:
@@ -46,30 +68,15 @@ def create_app() -> Flask:
         settings = default_settings()
 
         if request.method == "POST":
-            targets_text = request.form.get("targets", "")
-            communities_text = request.form.get("communities", "")
-            settings = read_settings(request.form)
             started = time.perf_counter()
             try:
-                targets = parse_targets(targets_text, max_hosts=settings["max_hosts"])
-                communities = parse_communities(communities_text)
-                if not targets:
-                    raise ValueError("Add at least one IP, IP range, or subnet.")
-                if not communities:
-                    raise ValueError("Add at least one SNMP community string.")
-                validate_selected_oids(settings["selected_oids"])
-                v3_creds = None
-                if "v3" in settings["snmp_versions"] and settings["v3_username"]:
-                    v3_creds = [V3Credentials(
-                        username=settings["v3_username"],
-                        auth_protocol=settings["v3_auth_protocol"],
-                        auth_key=settings["v3_auth_key"],
-                        priv_protocol=settings["v3_priv_protocol"],
-                        priv_key=settings["v3_priv_key"],
-                    )]
+                scan_request = build_scan_request(request.form)
+                targets_text = scan_request["targets_text"]
+                communities_text = scan_request["communities_text"]
+                settings = scan_request["settings"]
                 results = discover_many(
-                    targets,
-                    communities,
+                    scan_request["targets"],
+                    scan_request["communities"],
                     ping_timeout_ms=settings["ping_timeout_ms"],
                     snmp_timeout_seconds=settings["snmp_timeout_seconds"],
                     snmp_retries=settings["snmp_retries"],
@@ -79,11 +86,11 @@ def create_app() -> Flask:
                     walk_traffic_tables=settings["walk_traffic_tables"],
                     selected_oids=settings["selected_oids"],
                     snmp_versions=settings["snmp_versions"],
-                    v3_credentials=v3_creds,
+                    v3_credentials=scan_request["v3_credentials"],
                 )
                 elapsed = round(time.perf_counter() - started, 2)
                 snmp_ok = sum(1 for r in results if r.snmp_status == "ok")
-                _log.info("Scan complete: %d targets snmp_ok=%d elapsed=%.1fs", len(targets), snmp_ok, elapsed)
+                _log.info("Scan complete: %d targets snmp_ok=%d elapsed=%.1fs", len(scan_request["targets"]), snmp_ok, elapsed)
             except ValueError as exc:
                 error = str(exc)
 
@@ -98,6 +105,77 @@ def create_app() -> Flask:
             settings=settings,
             summary=build_summary(results),
             diagnostics=build_diagnostics(results, settings),
+            topology=build_topology_view(results),
+            mib_walk_plan=MIB_WALK_PLAN,
+        )
+
+    @app.route("/api/scans", methods=["POST"])
+    def start_scan():
+        try:
+            scan_request = build_scan_request(request.form)
+        except ValueError as exc:
+            return {"error": str(exc)}, 400
+
+        cleanup_scan_jobs()
+        job = ScanJob(
+            job_id=uuid.uuid4().hex,
+            targets_text=scan_request["targets_text"],
+            communities_text=scan_request["communities_text"],
+            settings=scan_request["settings"],
+            total=len(scan_request["targets"]),
+            started=time.perf_counter(),
+        )
+        with _SCAN_JOBS_LOCK:
+            _SCAN_JOBS[job.job_id] = job
+
+        thread = threading.Thread(
+            target=run_scan_job,
+            args=(job, scan_request),
+            name=f"snmp-scan-{job.job_id[:8]}",
+            daemon=True,
+        )
+        thread.start()
+        return job_snapshot(job)
+
+    @app.route("/api/scans/<job_id>")
+    def scan_status(job_id: str):
+        job = get_scan_job(job_id)
+        if job is None:
+            return {"error": "Scan job was not found or has expired."}, 404
+        return job_snapshot(job)
+
+    @app.route("/scan/<job_id>/results")
+    def scan_results(job_id: str):
+        job = get_scan_job(job_id)
+        if job is None:
+            return render_template(
+                "index.html",
+                targets="",
+                communities=_default_communities,
+                results=[],
+                results_json="[]",
+                error="Scan job was not found or has expired.",
+                elapsed=None,
+                settings=default_settings(),
+                summary=build_summary([]),
+                diagnostics=[],
+                topology=build_topology_view([]),
+                mib_walk_plan=MIB_WALK_PLAN,
+            ), 404
+
+        snapshot = job_snapshot(job)
+        results = deserialize_results(snapshot["results_json"])
+        return render_template(
+            "index.html",
+            targets=job.targets_text,
+            communities=job.communities_text,
+            results=results,
+            results_json=snapshot["results_json"],
+            error=job.error,
+            elapsed=snapshot["elapsed"],
+            settings=job.settings,
+            summary=build_summary(results),
+            diagnostics=build_diagnostics(results, job.settings),
             topology=build_topology_view(results),
             mib_walk_plan=MIB_WALK_PLAN,
         )
@@ -133,6 +211,118 @@ def create_app() -> Flask:
         return {"status": "ok"}
 
     return app
+
+
+def build_scan_request(form) -> dict:
+    targets_text = form.get("targets", "")
+    communities_text = form.get("communities", "")
+    settings = read_settings(form)
+    targets = parse_targets(targets_text, max_hosts=settings["max_hosts"])
+    communities = parse_communities(communities_text)
+    if not targets:
+        raise ValueError("Add at least one IP, IP range, or subnet.")
+    validate_selected_oids(settings["selected_oids"])
+
+    v3_credentials = build_v3_credentials(settings)
+    needs_community = any(version in {"v1", "v2c"} for version in settings["snmp_versions"])
+    if needs_community and not communities:
+        raise ValueError("Add at least one SNMP community string for v1/v2c scans.")
+    if not communities and not v3_credentials:
+        raise ValueError("Add a community string or SNMPv3 username.")
+
+    return {
+        "targets_text": targets_text,
+        "communities_text": communities_text,
+        "settings": settings,
+        "targets": targets,
+        "communities": communities,
+        "v3_credentials": v3_credentials,
+    }
+
+
+def build_v3_credentials(settings: dict) -> list[V3Credentials] | None:
+    if "v3" not in settings["snmp_versions"] or not settings["v3_username"]:
+        return None
+    return [
+        V3Credentials(
+            username=settings["v3_username"],
+            auth_protocol=settings["v3_auth_protocol"],
+            auth_key=settings["v3_auth_key"],
+            priv_protocol=settings["v3_priv_protocol"],
+            priv_key=settings["v3_priv_key"],
+        )
+    ]
+
+
+def run_scan_job(job: ScanJob, scan_request: dict) -> None:
+    settings = scan_request["settings"]
+    try:
+        for result in discover_iter(
+            scan_request["targets"],
+            scan_request["communities"],
+            ping_timeout_ms=settings["ping_timeout_ms"],
+            snmp_timeout_seconds=settings["snmp_timeout_seconds"],
+            snmp_retries=settings["snmp_retries"],
+            workers=settings["workers"],
+            do_ping=settings["do_ping"],
+            walk_details=settings["walk_details"],
+            walk_traffic_tables=settings["walk_traffic_tables"],
+            selected_oids=settings["selected_oids"],
+            snmp_versions=settings["snmp_versions"],
+            v3_credentials=scan_request["v3_credentials"],
+        ):
+            with job.lock:
+                job.results.append(result)
+        with job.lock:
+            job.status = "done"
+            job.elapsed = round(time.perf_counter() - job.started, 2)
+        snmp_ok = sum(1 for result in sorted_results(job.results) if result.snmp_status == "ok")
+        _log.info("Scan job %s complete: %d targets snmp_ok=%d elapsed=%.1fs", job.job_id, job.total, snmp_ok, job.elapsed or 0)
+    except Exception as exc:  # pragma: no cover - defensive path around background thread
+        _log.exception("Scan job %s crashed", job.job_id)
+        with job.lock:
+            job.status = "error"
+            job.error = f"{type(exc).__name__}: {exc}"
+            job.elapsed = round(time.perf_counter() - job.started, 2)
+
+
+def get_scan_job(job_id: str) -> ScanJob | None:
+    with _SCAN_JOBS_LOCK:
+        return _SCAN_JOBS.get(job_id)
+
+
+def cleanup_scan_jobs() -> None:
+    now = time.perf_counter()
+    with _SCAN_JOBS_LOCK:
+        expired = [
+            job_id
+            for job_id, job in _SCAN_JOBS.items()
+            if job.status != "running" and (job.elapsed is not None) and now - job.started > _SCAN_JOB_TTL_SECONDS
+        ]
+        for job_id in expired:
+            _SCAN_JOBS.pop(job_id, None)
+
+
+def job_snapshot(job: ScanJob) -> dict:
+    with job.lock:
+        results = sorted_results(job.results)
+        elapsed = job.elapsed if job.elapsed is not None else round(time.perf_counter() - job.started, 1)
+        return {
+            "job_id": job.job_id,
+            "status": job.status,
+            "error": job.error,
+            "total": job.total,
+            "completed": len(results),
+            "elapsed": elapsed,
+            "results": [result.public_dict(include_community=False) for result in results],
+            "results_json": serialize_results(results),
+            "summary": build_summary(results),
+            "diagnostics": build_diagnostics(results, job.settings),
+        }
+
+
+def sorted_results(results: list[DiscoveryResult]) -> list[DiscoveryResult]:
+    return sorted(results, key=lambda item: ipaddress.ip_address(item.ip))
 
 
 def default_settings() -> dict:

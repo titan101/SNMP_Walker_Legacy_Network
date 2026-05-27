@@ -1,4 +1,5 @@
 import io
+import time
 
 from openpyxl import load_workbook
 
@@ -14,7 +15,7 @@ def test_index_get_loads():
     assert b"SNMP Discovery" in response.data
     assert b"MIB/OID Coverage" in response.data
     assert b"sysDescr.0" in response.data
-    assert b"Scan running" in response.data
+    assert b"live-results-body" in response.data
     assert b'name="selected_oids"' in response.data
 
 
@@ -146,6 +147,50 @@ def test_index_post_shows_no_snmp_diagnostic(monkeypatch):
     assert response.status_code == 200
     assert b"No SNMP responders were found" in response.data
     assert b"No targets answered ICMP ping" in response.data
+
+
+def test_scan_api_reports_progress_and_result_page(monkeypatch):
+    def fake_discover_iter(targets, communities, **kwargs):
+        for target in targets:
+            yield DiscoveryResult(ip=target, hostname=f"host-{target}", snmp_status="ok")
+
+    monkeypatch.setattr("snmp_walker.web.discover_iter", fake_discover_iter)
+    client = app.test_client()
+    response = client.post(
+        "/api/scans",
+        data={
+            "targets": "192.0.2.1\n192.0.2.2",
+            "communities": "public",
+            "workers": "2",
+        },
+    )
+    assert response.status_code == 200
+    job_id = response.get_json()["job_id"]
+
+    payload = {}
+    for _ in range(20):
+        status = client.get(f"/api/scans/{job_id}")
+        assert status.status_code == 200
+        payload = status.get_json()
+        if payload["status"] == "done":
+            break
+        time.sleep(0.05)
+
+    assert payload["status"] == "done"
+    assert payload["completed"] == 2
+    assert payload["total"] == 2
+    assert payload["results"][0]["ip"] == "192.0.2.1"
+
+    result_page = client.get(f"/scan/{job_id}/results")
+    assert result_page.status_code == 200
+    assert b"host-192.0.2.1" in result_page.data
+
+
+def test_scan_api_returns_validation_errors():
+    client = app.test_client()
+    response = client.post("/api/scans", data={"targets": "", "communities": "public"})
+    assert response.status_code == 400
+    assert b"Add at least one IP" in response.data
 
 
 def test_download_csv_from_result_payload():

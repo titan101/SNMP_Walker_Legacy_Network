@@ -2,6 +2,25 @@
 
 Running project log for SNMP Walker Legacy Network. Keep this file updated whenever the app behavior, packaging, deployment method, or supported discovery scope changes.
 
+## 2026-05-27 - Live Scan Progress
+
+What changed:
+
+- Added background scan jobs for the web UI so long scans no longer wait silently on a blocking form POST.
+- Added `/api/scans` and `/api/scans/<job_id>` for live progress polling.
+- The scan page now shows processed/total counts, elapsed time, a progress bar, and completed IP rows as workers finish.
+- The browser opens `/scan/<job_id>/results` after completion so the normal result table, topology view, and downloads still work.
+- Kept the original blocking POST path as a no-JavaScript fallback.
+- Set Flask dev-server mode to threaded so local `./run.sh` can serve progress polling while a scan is running.
+
+Validation:
+
+- `python -m pytest -q`: 24 passed.
+- `python -m compileall snmp_walker`
+- WSL `bash -n run.sh`, `run_server.sh`, and `scripts/bootstrap_env.sh`
+- Live `/api/scans` smoke test returned a completed row and rendered the stored result page.
+- Live `run_server.sh` health check returned `{"status":"ok"}`.
+
 ## 2026-05-26 - No-Admin WSL Bootstrap Fallback
 
 What changed:
@@ -166,5 +185,4 @@ Validation:
 - Add node/edge exports: `local_device`, `local_port`, `remote_device`, `remote_port`.
 - Add Mermaid and Graphviz exports for simple diagrams.
 - Add multi-sheet Excel export for devices, interfaces, neighbors, serials/modules, and failures.
-- Add live progress for long subnet scans.
 - Add retry profiles for slower legacy gear.

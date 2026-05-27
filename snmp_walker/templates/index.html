@@ -185,6 +185,44 @@
       background: rgba(104, 167, 255, 0.1);
     }
     .loading.active { display: block; }
+    .live-head {
+      display: flex;
+      justify-content: space-between;
+      gap: 10px;
+      align-items: center;
+      flex-wrap: wrap;
+      margin-bottom: 8px;
+    }
+    .progress-track {
+      height: 8px;
+      border-radius: 999px;
+      background: rgba(104, 167, 255, 0.16);
+      overflow: hidden;
+      margin: 8px 0 10px;
+    }
+    .progress-fill {
+      width: 0%;
+      height: 100%;
+      background: var(--accent-2);
+      transition: width 180ms ease;
+    }
+    .live-table-wrap {
+      display: none;
+      max-height: 260px;
+      overflow: auto;
+      border: 1px solid rgba(104, 167, 255, 0.2);
+      border-radius: 6px;
+      background: rgba(8, 16, 22, 0.62);
+    }
+    .live-table-wrap.active { display: block; }
+    table.live-table {
+      min-width: 760px;
+    }
+    .live-table th,
+    .live-table td {
+      padding: 7px 8px;
+      font-size: 12px;
+    }
     .summary {
       display: grid;
       grid-template-columns: repeat(6, minmax(0, 1fr));
@@ -369,7 +407,29 @@
       {% if error %}
         <div class="error">{{ error }}</div>
       {% endif %}
-      <div class="loading" id="scan-loading">Scan running. Results return after all target and community timeouts finish.</div>
+      <div class="loading" id="scan-loading">
+        <div class="live-head">
+          <strong id="scan-status-text">Scan starting.</strong>
+          <span id="scan-elapsed" class="hint">0.0s</span>
+        </div>
+        <div class="progress-track"><div class="progress-fill" id="scan-progress-fill"></div></div>
+        <div class="hint" id="scan-progress-detail">Waiting for first completed target.</div>
+        <div class="live-table-wrap" id="live-table-wrap">
+          <table class="live-table">
+            <thead>
+              <tr>
+                <th>IP</th>
+                <th>Ping</th>
+                <th>SNMP</th>
+                <th>Hostname</th>
+                <th>Model</th>
+                <th>Error</th>
+              </tr>
+            </thead>
+            <tbody id="live-results-body"></tbody>
+          </table>
+        </div>
+      </div>
       <form class="scan" method="post" id="scan-form">
         <input type="hidden" name="oid_selection_present" value="1">
         <label>
@@ -570,18 +630,124 @@
     </section>
   </main>
   <script>
-    // Scan form submit feedback
+    // Live scan progress
     const scanForm = document.getElementById("scan-form");
     const scanLoading = document.getElementById("scan-loading");
     if (scanForm && scanLoading) {
-      scanForm.addEventListener("submit", () => {
+      const statusText = document.getElementById("scan-status-text");
+      const elapsedText = document.getElementById("scan-elapsed");
+      const detailText = document.getElementById("scan-progress-detail");
+      const progressFill = document.getElementById("scan-progress-fill");
+      const liveWrap = document.getElementById("live-table-wrap");
+      const liveBody = document.getElementById("live-results-body");
+      let pollTimer = null;
+
+      scanForm.addEventListener("submit", async (event) => {
+        event.preventDefault();
         scanLoading.classList.add("active");
         const button = scanForm.querySelector("button[type='submit']");
         if (button) {
           button.disabled = true;
           button.textContent = "Scanning";
         }
+        setStatus("Starting scan.", "Waiting for first completed target.", 0, 0, 0);
+        renderLiveRows([]);
+
+        try {
+          const response = await fetch("/api/scans", {
+            method: "POST",
+            body: new FormData(scanForm)
+          });
+          const data = await response.json();
+          if (!response.ok) {
+            throw new Error(data.error || "Could not start scan.");
+          }
+          updateScanStatus(data);
+          pollTimer = window.setInterval(() => pollScan(data.job_id), 1000);
+        } catch (error) {
+          setStatus("Scan could not start.", error.message || String(error), 0, 0, 0);
+          if (button) {
+            button.disabled = false;
+            button.textContent = "Run discovery";
+          }
+        }
       });
+
+      async function pollScan(jobId) {
+        try {
+          const response = await fetch(`/api/scans/${jobId}`);
+          const data = await response.json();
+          if (!response.ok) {
+            throw new Error(data.error || "Could not read scan status.");
+          }
+          updateScanStatus(data);
+          if (data.status !== "running") {
+            window.clearInterval(pollTimer);
+            const button = scanForm.querySelector("button[type='submit']");
+            if (button) {
+              button.disabled = false;
+              button.textContent = "Run discovery";
+            }
+            if (data.status === "done") {
+              setStatus("Scan complete. Opening results.", `${data.completed}/${data.total} targets processed.`, data.completed, data.total, data.elapsed);
+              window.setTimeout(() => {
+                window.location.href = `/scan/${jobId}/results`;
+              }, 450);
+            }
+          }
+        } catch (error) {
+          window.clearInterval(pollTimer);
+          setStatus("Scan status failed.", error.message || String(error), 0, 0, 0);
+          const button = scanForm.querySelector("button[type='submit']");
+          if (button) {
+            button.disabled = false;
+            button.textContent = "Run discovery";
+          }
+        }
+      }
+
+      function updateScanStatus(data) {
+        const total = Number(data.total || 0);
+        const completed = Number(data.completed || 0);
+        const status = data.status === "running" ? "Scan running." : data.status === "done" ? "Scan complete." : "Scan error.";
+        const detail = data.error || `${completed}/${total} targets processed. Results appear below as each IP finishes.`;
+        setStatus(status, detail, completed, total, data.elapsed || 0);
+        renderLiveRows(data.results || []);
+      }
+
+      function setStatus(title, detail, completed, total, elapsed) {
+        if (statusText) statusText.textContent = title;
+        if (detailText) detailText.textContent = detail;
+        if (elapsedText) elapsedText.textContent = `${Number(elapsed || 0).toFixed(1)}s`;
+        if (progressFill) {
+          const pct = total ? Math.round((completed / total) * 100) : 0;
+          progressFill.style.width = `${Math.max(0, Math.min(100, pct))}%`;
+        }
+      }
+
+      function renderLiveRows(rows) {
+        if (!liveBody || !liveWrap) return;
+        liveWrap.classList.toggle("active", rows.length > 0);
+        liveBody.innerHTML = rows.map((row) => `
+          <tr>
+            <td class="mono">${escapeHtml(row.ip || "")}</td>
+            <td><span class="pill ${row.pingable_or_not === "yes" ? "ok" : "bad"}">${escapeHtml(row.pingable_or_not || "unknown")}</span></td>
+            <td><span class="pill ${row.snmp_status === "ok" ? "ok" : "warn"}">${escapeHtml(row.snmp_status || "not_run")}</span></td>
+            <td>${escapeHtml(row.hostname || "")}</td>
+            <td>${escapeHtml(row.device_model || "")}</td>
+            <td>${escapeHtml(row.snmp_error || "")}</td>
+          </tr>
+        `).join("");
+      }
+
+      function escapeHtml(value) {
+        return String(value)
+          .replaceAll("&", "&amp;")
+          .replaceAll("<", "&lt;")
+          .replaceAll(">", "&gt;")
+          .replaceAll('"', "&quot;")
+          .replaceAll("'", "&#039;");
+      }
     }
 
     // v3 checkbox — show/hide credentials section

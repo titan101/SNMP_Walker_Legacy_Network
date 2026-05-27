@@ -521,8 +521,40 @@ def discover_many(
     snmp_versions: "list[str] | None" = None,
     v3_credentials: "list[V3Credentials] | None" = None,
 ) -> list[DiscoveryResult]:
+    return sorted(
+        discover_iter(
+            ips,
+            communities,
+            ping_timeout_ms=ping_timeout_ms,
+            snmp_timeout_seconds=snmp_timeout_seconds,
+            snmp_retries=snmp_retries,
+            workers=workers,
+            do_ping=do_ping,
+            walk_details=walk_details,
+            walk_traffic_tables=walk_traffic_tables,
+            selected_oids=selected_oids,
+            snmp_versions=snmp_versions,
+            v3_credentials=v3_credentials,
+        ),
+        key=lambda item: ipaddress.ip_address(item.ip),
+    )
+
+
+def discover_iter(
+    ips: Iterable[str],
+    communities: list[str],
+    ping_timeout_ms: int = 800,
+    snmp_timeout_seconds: float = 1.2,
+    snmp_retries: int = 1,
+    workers: int = 24,
+    do_ping: bool = True,
+    walk_details: bool = False,
+    walk_traffic_tables: bool = False,
+    selected_oids: Iterable[str] | None = None,
+    snmp_versions: "list[str] | None" = None,
+    v3_credentials: "list[V3Credentials] | None" = None,
+) -> Iterable[DiscoveryResult]:
     ip_list = list(ips)
-    results: list[DiscoveryResult] = []
     max_workers = max(1, min(workers, 128))
     _log.info("Scan start: %d targets %d workers", len(ip_list), max_workers)
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
@@ -545,18 +577,15 @@ def discover_many(
         }
         for future in as_completed(futures):
             try:
-                results.append(future.result())
+                yield future.result()
             except Exception as exc:
                 ip = futures[future]
                 _log.exception("Worker crash for %s", ip)
-                results.append(
-                    DiscoveryResult(
-                        ip=ip,
-                        snmp_status="error",
-                        snmp_error=f"{type(exc).__name__}: {exc}",
-                    )
+                yield DiscoveryResult(
+                    ip=ip,
+                    snmp_status="error",
+                    snmp_error=f"{type(exc).__name__}: {exc}",
                 )
-    return sorted(results, key=lambda item: ipaddress.ip_address(item.ip))
 
 
 def clean_snmp_text(value: str) -> str:
