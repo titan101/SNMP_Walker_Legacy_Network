@@ -38,6 +38,8 @@ The scan page lets you select individual OIDs from the MIB/OID coverage table. A
 
 Scans run as background jobs from the web UI. The page updates the processed/total count and shows completed IP rows while the scan is still running, then opens the full results view with topology and downloads when complete.
 
+The browser remembers the last targets and community strings on that desktop so repeat users do not have to retype them after restarting WSL or the app. Uncheck `Remember inputs` on the scan form to clear the saved browser copy.
+
 ## Quick Start
 
 Launchers create a local `.venv` folder and install dependencies on first run. Requires Python 3.10+.

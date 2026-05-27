@@ -2,6 +2,20 @@
 
 Running project log for SNMP Walker Legacy Network. Keep this file updated whenever the app behavior, packaging, deployment method, or supported discovery scope changes.
 
+## 2026-05-27 - Remember Scan Inputs
+
+What changed:
+
+- Added browser-local persistence for the scan target list and v1/v2c community strings.
+- Added a `Remember inputs` checkbox that is enabled by default and clears the saved browser copy when unchecked.
+- Restores saved inputs on the main scan page after WSL/app restarts without writing SNMP communities into a server-side repo file.
+
+Validation:
+
+- `python -m pytest -q`: 24 passed.
+- `python -m compileall snmp_walker`
+- WSL `bash -n run.sh`, `run_server.sh`, and `scripts/bootstrap_env.sh`
+
 ## 2026-05-27 - Live Scan Progress
 
 What changed:

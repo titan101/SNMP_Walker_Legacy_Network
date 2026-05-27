@@ -434,11 +434,11 @@
         <input type="hidden" name="oid_selection_present" value="1">
         <label>
           Targets
-          <textarea name="targets" spellcheck="false">{{ targets }}</textarea>
+          <textarea name="targets" id="targets-input" spellcheck="false">{{ targets }}</textarea>
         </label>
         <label>
           Community strings (v1/v2c)
-          <textarea name="communities" spellcheck="false">{{ communities }}</textarea>
+          <textarea name="communities" id="communities-input" spellcheck="false">{{ communities }}</textarea>
         </label>
         <div class="checks">
           <span style="color:var(--muted);font-size:12px;font-weight:700;margin-right:4px;">SNMP Versions</span>
@@ -477,6 +477,7 @@
           <label class="check"><input type="checkbox" name="walk_details" {% if settings.walk_details %}checked{% endif %}> Walk inventory MIBs</label>
           <label class="check"><input type="checkbox" name="walk_traffic_tables" {% if settings.walk_traffic_tables %}checked{% endif %}> Walk ARP/MAC tables</label>
           <label class="check"><input type="checkbox" name="include_community" {% if settings.include_community %}checked{% endif %}> Include matched community in downloads</label>
+          <label class="check"><input type="checkbox" id="remember-inputs" checked> Remember inputs</label>
         </div>
         <div class="actions">
           <button class="primary" type="submit">Run discovery</button>
@@ -630,6 +631,50 @@
     </section>
   </main>
   <script>
+    // Remember last desktop inputs in this browser.
+    (function () {
+      const targetsInput = document.getElementById("targets-input");
+      const communitiesInput = document.getElementById("communities-input");
+      const rememberInputs = document.getElementById("remember-inputs");
+      const storagePrefix = "snmpWalker.";
+      const targetsKey = storagePrefix + "targets";
+      const communitiesKey = storagePrefix + "communities";
+      let storage = null;
+      try {
+        storage = window.localStorage;
+      } catch (error) {
+        storage = null;
+      }
+
+      if (!targetsInput || !communitiesInput || !rememberInputs || !storage) return;
+
+      const isMainScanPage = window.location.pathname === "/";
+      if (isMainScanPage) {
+        const savedTargets = storage.getItem(targetsKey);
+        const savedCommunities = storage.getItem(communitiesKey);
+        if (savedTargets !== null) targetsInput.value = savedTargets;
+        if (savedCommunities !== null) communitiesInput.value = savedCommunities;
+      }
+
+      function saveRememberedInputs() {
+        if (!rememberInputs.checked) return;
+        storage.setItem(targetsKey, targetsInput.value);
+        storage.setItem(communitiesKey, communitiesInput.value);
+      }
+
+      targetsInput.addEventListener("input", saveRememberedInputs);
+      communitiesInput.addEventListener("input", saveRememberedInputs);
+      rememberInputs.addEventListener("change", () => {
+        if (rememberInputs.checked) {
+          saveRememberedInputs();
+        } else {
+          storage.removeItem(targetsKey);
+          storage.removeItem(communitiesKey);
+        }
+      });
+      if (isMainScanPage) saveRememberedInputs();
+    })();
+
     // Live scan progress
     const scanForm = document.getElementById("scan-form");
     const scanLoading = document.getElementById("scan-loading");
@@ -644,6 +689,19 @@
 
       scanForm.addEventListener("submit", async (event) => {
         event.preventDefault();
+        const rememberInputs = document.getElementById("remember-inputs");
+        const targetsInput = document.getElementById("targets-input");
+        const communitiesInput = document.getElementById("communities-input");
+        let storage = null;
+        try {
+          storage = window.localStorage;
+        } catch (error) {
+          storage = null;
+        }
+        if (rememberInputs && rememberInputs.checked && targetsInput && communitiesInput && storage) {
+          storage.setItem("snmpWalker.targets", targetsInput.value);
+          storage.setItem("snmpWalker.communities", communitiesInput.value);
+        }
         scanLoading.classList.add("active");
         const button = scanForm.querySelector("button[type='submit']");
         if (button) {

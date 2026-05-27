@@ -16,6 +16,8 @@ def test_index_get_loads():
     assert b"MIB/OID Coverage" in response.data
     assert b"sysDescr.0" in response.data
     assert b"live-results-body" in response.data
+    assert b"remember-inputs" in response.data
+    assert b"snmpWalker.communities" in response.data
     assert b'name="selected_oids"' in response.data
 
 
