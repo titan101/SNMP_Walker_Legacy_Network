@@ -1,0 +1,2 @@
+# SNMP community strings - one per line.
+# Keep real values private. The script will prompt if this file has no usable entries.
