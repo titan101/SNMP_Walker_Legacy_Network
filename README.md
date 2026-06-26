@@ -1,6 +1,6 @@
 # CIDR fping + SNMP Audit
 
-Made by Varun and Copilot.
+
 
 This project contains one combined Ubuntu-ready workflow:
 
