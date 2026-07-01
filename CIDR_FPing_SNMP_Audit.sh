@@ -326,7 +326,7 @@ clean_snmp_value() {
 
   value="${value//$'\r'/ }"
   value="${value//$'\n'/ }"
-  value="$(printf '%s' "$value" | sed -E 's/^[[:space:]]+//; s/[[:space:]]+$//; s/^"//; s/"$//')"
+  value="$(printf '%s' "$value" | sed -E 's/^[[:space:]]+//; s/[[:space:]]+$//; s/^\"//; s/\"$//')"
   [[ -z "$value" ]] && value="NA"
   printf '%s' "$value"
 }
