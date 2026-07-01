@@ -1,6 +1,10 @@
 # CIDR fping + SNMP Audit
 
+<<<<<<< HEAD
 
+=======
+Made by Varun and Copilot.
+>>>>>>> c08afda51b04cc12d61e087aea43e8251338c7f1
 
 This project contains one combined Ubuntu-ready workflow:
 
@@ -158,7 +162,11 @@ subnet,total_usable_ips,used_ips,free_ips,used_percent,free_percent,snmp_success
 
 ## Notes
 
+<<<<<<< HEAD
 - The old helper scripts were intentionally removed from this folder so this is a clean two-file handoff: the script and this README.
+=======
+- The old helper scripts were intentionally removed from this folder. The hidden `.gitattributes` file only keeps the Bash script in Linux line endings.
+>>>>>>> c08afda51b04cc12d61e087aea43e8251338c7f1
 - The script is intentionally chatty: it prints each major step, per-subnet alive counts, SNMP progress, and final output paths.
 - `used_ips` means ping-responsive IPs from `fping`. `free_ips` means usable addresses in the CIDR minus ping-responsive IPs.
 - Usable IP math treats `/31` as 2 usable addresses and `/32` as 1 usable address.

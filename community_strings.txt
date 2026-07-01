@@ -1,5 +1,6 @@
 # SNMP community strings - one per line.
 # Keep real values private. The script will prompt if this file has no usable entries.
+<<<<<<< HEAD
 
 public
 ciena
@@ -9,3 +10,5 @@ jnprspace
 AyeMat13
 3tH4U2
 n0br3ak
+=======
+>>>>>>> c08afda51b04cc12d61e087aea43e8251338c7f1

@@ -326,7 +326,13 @@ clean_snmp_value() {
 
   value="${value//$'\r'/ }"
   value="${value//$'\n'/ }"
+<<<<<<< HEAD
   value="$(printf '%s' "$value" | sed -E 's/^[[:space:]]+//; s/[[:space:]]+$//; s/^\"//; s/\"$//')"
+=======
+  value="$(trim "$value")"
+  value="${value#\"}"
+  value="${value%\"}"
+>>>>>>> c08afda51b04cc12d61e087aea43e8251338c7f1
   [[ -z "$value" ]] && value="NA"
   printf '%s' "$value"
 }
@@ -517,7 +523,11 @@ check_dependencies() {
   local missing=()
   local cmd
 
+<<<<<<< HEAD
   for cmd in awk sed sort mktemp date wc tr; do
+=======
+  for cmd in awk sort mktemp date wc tr; do
+>>>>>>> c08afda51b04cc12d61e087aea43e8251338c7f1
     command -v "$cmd" >/dev/null 2>&1 || missing+=("$cmd")
   done
 
@@ -584,7 +594,13 @@ discover_alive_ips() {
     fping -a -g -r "$FPING_RETRIES" -t "$FPING_TIMEOUT_MS" "$cidr" > "$cidr_tmp" 2> "$cidr_err" || true
 
     if [[ -s "$cidr_err" ]]; then
+<<<<<<< HEAD
       sed "s/^/[${cidr}] /" "$cidr_err" >> "$ERROR_LOG"
+=======
+      while IFS= read -r error_line || [[ -n "$error_line" ]]; do
+        printf '[%s] %s\n' "$cidr" "$error_line" >> "$ERROR_LOG"
+      done < "$cidr_err"
+>>>>>>> c08afda51b04cc12d61e087aea43e8251338c7f1
     fi
 
     count=0
